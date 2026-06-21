@@ -1,0 +1,89 @@
+"""配置加载模块。
+
+使用 pydantic-settings 从 .env 文件加载所有配置项，
+支持 OpenAI / DeepSeek / Qwen 等兼容接口切换。
+"""
+
+from functools import lru_cache
+from pathlib import Path
+
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+# 项目根目录（qinghe-video/）
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+class Settings(BaseSettings):
+    """应用全局配置。
+
+    所有字段均可通过 .env 文件或环境变量覆盖。
+    """
+
+    model_config = SettingsConfigDict(
+        env_file=str(PROJECT_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        case_sensitive=True,
+        extra="ignore",
+    )
+
+    # ---------- LLM 配置 ----------
+    LLM_MODEL: str = "gpt-4o-mini"
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_API_KEY: str = ""
+    LLM_TEMPERATURE: float = 0.7
+    LLM_MAX_TOKENS: int = 2048
+
+    # ---------- 应用配置 ----------
+    APP_HOST: str = "0.0.0.0"
+    APP_PORT: int = 18739
+    LOG_LEVEL: str = "INFO"
+
+    # ---------- 前端配置 ----------
+    STREAMLIT_PORT: int = 18510
+    BACKEND_URL: str = "http://localhost:18739"
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """获取全局配置单例。
+
+    Returns:
+        Settings: 加载完成的配置实例。
+    """
+    return Settings()
+
+
+# 默认配置实例，供各模块直接 import
+settings = get_settings()
+
+
+def get_prompt(prompt_name: str) -> str:
+    """读取 prompts 目录下的 system prompt 文本。
+
+    Args:
+        prompt_name: 不带扩展名的 prompt 文件名，如 "planner"。
+
+    Returns:
+        str: prompt 文本内容。
+    """
+    prompt_path = PROJECT_ROOT / "src" / "prompts" / f"{prompt_name}.txt"
+    return prompt_path.read_text(encoding="utf-8")
+
+
+def get_system_prompt(prompt_name: str) -> str:
+    """读取 system prompt 并转义 LangChain f-string 模板中的大括号。
+
+    因为 system prompt 中包含 JSON 示例，直接传入 ChatPromptTemplate 会被
+    LangChain 当作模板变量解析，导致 ``Nested replacement fields`` 错误。
+    此函数将 ``{`` 和 ``}`` 分别转义为 ``{{`` 和 ``}}``，使 JSON 原样输出。
+
+    注意：当前所有 system prompt 文件中不包含真正的模板变量，因此统一转义安全。
+
+    Args:
+        prompt_name: 不带扩展名的 prompt 文件名，如 "planner"。
+
+    Returns:
+        str: 已转义的 prompt 文本内容。
+    """
+    return get_prompt(prompt_name).replace("{", "{{").replace("}", "}}")

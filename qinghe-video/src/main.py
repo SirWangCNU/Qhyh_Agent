@@ -16,11 +16,20 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
+from pydantic import BaseModel
 
+from src.agent_steps import AgentStep, AgentStepRequest, run_agent_step
 from src.config import settings
 from src.graph import app_graph
+from src.image_generation import ImageGenerationRequest, generate_image
 from src.models import UserInput
+from src.tts_service import synthesize as tts_synthesize, _synthesize_async
+from src.video_compose import compose as compose_video
+from src.video_generation import VideoGenerationRequest, build_video_preview
+from src.video_mvp import VideoMvpRequest, video_mvp as run_video_mvp
 
 # ---------- 日志配置 ----------
 logging.basicConfig(
@@ -36,7 +45,7 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# 允许 Streamlit 前端跨域访问
+# 允许前端跨域访问
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -45,11 +54,179 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------- 静态文件服务 ----------
+_FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
+_FRONTEND_ASSETS = _FRONTEND_DIR / "assets"
+
+if _FRONTEND_DIR.exists():
+    app.mount("/assets", StaticFiles(directory=str(_FRONTEND_ASSETS)), name="assets")
+
+# ---------- 产物目录（音频 / 视频） ----------
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_OUTPUTS_DIR = _PROJECT_ROOT / "outputs"
+_AUDIO_DIR = _OUTPUTS_DIR / "audio"
+_VIDEO_DIR = _OUTPUTS_DIR / "video"
+_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
+_VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/outputs", StaticFiles(directory=str(_OUTPUTS_DIR)), name="outputs")
+
+
+@app.get("/", summary="前端页面")
+def index():
+    """返回前端 index.html。"""
+    index_file = _FRONTEND_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="前端页面未找到")
+    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+
 
 @app.get("/api/health", summary="健康检查")
 def health() -> dict[str, str]:
     """健康检查接口。"""
     return {"status": "ok", "service": "qinghe-video", "version": "0.1.0"}
+
+
+@app.post("/api/agents/{step}", summary="单步执行 Agent")
+def run_agent_step_api(step: AgentStep, payload: AgentStepRequest) -> dict[str, Any]:
+    """按步骤单独执行指定 Agent，并返回累计状态。"""
+    try:
+        result = run_agent_step(step, payload)
+    except Exception as e:
+        logger.exception("[API] 单步 Agent 执行失败 step=%s", step)
+        raise HTTPException(status_code=500, detail=f"{step} 执行失败: {e}") from e
+
+    if result.get("error"):
+        logger.warning("[API] 单步 Agent 返回错误 step=%s: %s", step, result["error"])
+    return result
+
+
+@app.post("/api/images/generate", summary="生成图片素材")
+async def generate_image_asset(payload: ImageGenerationRequest) -> dict[str, Any]:
+    """使用配置的图片模型生成视觉素材。"""
+    try:
+        images = await generate_image(payload)
+    except Exception as e:
+        logger.exception("[API] 图片生成失败")
+        raise HTTPException(status_code=500, detail=f"图片生成失败: {e}") from e
+
+    return {
+        "status": "success",
+        "model": settings.IMAGE_MODEL,
+        "size": payload.size or settings.IMAGE_SIZE,
+        "images": [item.model_dump() for item in images],
+    }
+
+
+@app.post("/api/videos/generate", summary="生成视频素材预览")
+def generate_video_asset(payload: VideoGenerationRequest) -> dict[str, Any]:
+    """返回视频生成展示配置；真实视频生成协议接入后替换此实现。"""
+    return build_video_preview(payload)
+
+
+# ---------- TTS 配音 ----------
+class TTSRequest(BaseModel):
+    """TTS 旁白合成请求。"""
+
+    text: str
+    filename: str | None = None
+
+
+@app.post("/api/tts/generate", summary="合成旁白配音")
+async def generate_tts(req: TTSRequest) -> dict[str, Any]:
+    """使用 edge-tts 将文本合成为 mp3 音频，写入 outputs/audio/ 目录。
+
+    返回字段：
+    - ``audio_path``: 服务端绝对路径
+    - ``audio_url``: 可通过浏览器访问的相对 URL（/outputs/audio/xxx.mp3）
+    """
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="文本不能为空")
+
+    filename = (req.filename or f"tts_{uuid.uuid4().hex[:12]}.mp3").strip()
+    if not filename.lower().endswith(".mp3"):
+        filename = f"{filename}.mp3"
+    # 防止路径穿越：仅保留文件名部分
+    filename = Path(filename).name
+
+    audio_path = _AUDIO_DIR / filename
+    try:
+        await _synthesize_async(req.text, str(audio_path))
+    except Exception as e:
+        logger.exception("[API] TTS 合成失败 filename=%s", filename)
+        raise HTTPException(status_code=500, detail=f"TTS 合成失败: {e}") from e
+
+    return {
+        "status": "success",
+        "audio_path": str(audio_path),
+        "audio_url": f"/outputs/audio/{filename}",
+    }
+
+
+# ---------- 视频合成 ----------
+class VideoComposeRequest(BaseModel):
+    """视频合成请求。"""
+
+    image_urls: list[str]
+    audio_path: str
+    filename: str | None = None
+
+
+@app.post("/api/video/compose", summary="合成竖屏 mp4 视频")
+async def compose_video_endpoint(req: VideoComposeRequest) -> dict[str, Any]:
+    """把分镜图片轮播 + TTS 旁白拼接为 9:16 竖屏 mp4。
+
+    返回字段：
+    - ``video_path``: 服务端绝对路径
+    - ``video_url``: 可通过浏览器访问的相对 URL（/outputs/video/xxx.mp4）
+    """
+    if not req.image_urls:
+        raise HTTPException(status_code=400, detail="至少需要 1 张图片")
+    if not req.audio_path.strip():
+        raise HTTPException(status_code=400, detail="音频路径不能为空")
+
+    filename = (req.filename or f"video_{uuid.uuid4().hex[:12]}.mp4").strip()
+    if not filename.lower().endswith(".mp4"):
+        filename = f"{filename}.mp4"
+    # 防止路径穿越：仅保留文件名部分
+    filename = Path(filename).name
+
+    video_path = _VIDEO_DIR / filename
+    try:
+        compose_video(req.image_urls, req.audio_path, str(video_path))
+    except Exception as e:
+        logger.exception("[API] 视频合成失败 filename=%s", filename)
+        raise HTTPException(status_code=500, detail=f"视频合成失败: {e}") from e
+
+    return {
+        "status": "success",
+        "video_path": str(video_path),
+        "video_url": f"/outputs/video/{filename}",
+    }
+
+
+# ---------- 一键成片 ----------
+@app.post("/api/video/mvp", summary="一键成片（分镜取图 → TTS → 视频合成）")
+async def video_mvp_endpoint(req: VideoMvpRequest) -> dict[str, Any]:
+    """一键成片：从 workshop state 取分镜 prompt → 逐镜生图 → TTS 合成 → 视频合成。
+
+    请求体传入完整流水线 state（至少含 ``visual_output.shot_prompts``，
+    推荐含 ``copywriter_output``），可选 ``text`` 覆盖旁白。
+
+    返回字段：
+    - ``video_url``: 合成 mp4 的可访问 URL（/outputs/video/mvp_xxx.mp4）
+    - ``audio_url``: TTS 音频 URL（/outputs/audio/mvp_xxx.mp3）
+    - ``image_count``: 实际生成的分镜图片数
+    - ``duration_estimate``: 预估视频时长（秒）
+    """
+    try:
+        return await run_video_mvp(req, _AUDIO_DIR, _VIDEO_DIR)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except RuntimeError as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+    except Exception as e:
+        logger.exception("[API] 一键成片失败")
+        raise HTTPException(status_code=500, detail=f"一键成片失败: {e}") from e
 
 
 @app.post("/api/generate", summary="生成短视频创作方案")

@@ -1,174 +1,115 @@
-﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-    青禾映画 MVP 一键启动脚本（PowerShell）
-.DESCRIPTION
-    自动停止占用目标端口的旧进程，并启动后端 FastAPI 和前端 Streamlit。
-.PARAMETER FrontendPort
-    Streamlit 前端端口，默认读取 .env 中的 STREAMLIT_PORT 或 18510
-.PARAMETER BackendPort
-    FastAPI 后端端口，默认读取 .env 中的 APP_PORT 或 18739
-.PARAMETER SkipBackend
-    跳过启动后端
-.PARAMETER SkipFrontend
-    跳过启动前端
-.EXAMPLE
-    .\start.ps1
-    .\start.ps1 -BackendPort 18739 -FrontendPort 18510
-#>
+﻿﻿﻿﻿﻿﻿﻿#Requires -Version 5.1
 param(
-    [int]$FrontendPort = 0,
     [int]$BackendPort = 0,
-    [switch]$SkipBackend,
-    [switch]$SkipFrontend
+    [switch]$SkipBackend
 )
 
-# 设置默认编码为 UTF-8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding = [System.Text.Encoding]::UTF8
+chcp 65001 | Out-Null
 
-# 切换到脚本所在目录
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-Set-Location -Path $scriptDir
+$projectDir = $PSScriptRoot
+Set-Location -Path $projectDir
 
 Write-Host "============================================" -ForegroundColor Cyan
-Write-Host "  青禾映画 MVP 启动脚本" -ForegroundColor Cyan
-Write-Host "  目录: $scriptDir" -ForegroundColor Cyan
+Write-Host "  QingHe Video MVP" -ForegroundColor Cyan
+Write-Host "  Dir: $projectDir" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 
-# ---------- 辅助函数 ----------
 function Get-EnvValue {
     param([string]$Key, [string]$DefaultValue)
-    $envPath = Join-Path $scriptDir ".env"
+    $envPath = Join-Path $projectDir ".env"
     if (Test-Path $envPath) {
-        $line = Get-Content $envPath | Where-Object { $_ -match "^$Key\s*=" }
-        if ($line) {
-            return ($line -split "=", 2)[1].Trim()
-        }
+        $line = Get-Content $envPath -Encoding UTF8 | Where-Object { $_ -match "^$Key\s*=" }
+        if ($line) { return ($line -split "=", 2)[1].Trim() }
     }
     return $DefaultValue
 }
 
-function Test-CommandAvailable {
-    param([string]$Command)
-    return [bool](Get-Command $Command -ErrorAction SilentlyContinue)
-}
-
-function Get-PythonExecutable {
-    foreach ($cmd in @("python", "py", "python3")) {
-        if (Test-CommandAvailable $cmd) { return $cmd }
-    }
-    return $null
-}
-
 function Stop-ProcessByPort {
     param([int]$Port)
-    $connections = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
-    if ($connections) {
-        $procIds = $connections | Select-Object -ExpandProperty OwningProcess -Unique
-        foreach ($procId in $procIds) {
-            try {
-                $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
-                if ($proc) {
-                    Write-Host "  正在停止占用端口 $Port 的进程: $($proc.ProcessName) (PID $procId)" -ForegroundColor Yellow
-                    Stop-Process -Id $procId -Force -ErrorAction Stop
-                }
+    try {
+        $conns = Get-NetTCPConnection -LocalPort $Port -ErrorAction SilentlyContinue
+    } catch {
+        return
+    }
+    if (-not $conns) { return }
+
+    $procIds = $conns | Select-Object -ExpandProperty OwningProcess -Unique
+    foreach ($procId in $procIds) {
+        try {
+            $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+            if ($proc -and $proc.ProcessName -ne "Idle") {
+                Write-Host "  Kill port $Port : $($proc.ProcessName) (PID $procId)" -ForegroundColor Yellow
+                Stop-Process -Id $procId -Force -ErrorAction Stop
             }
-            catch {
-                Write-Warning "无法结束占用端口 $Port 的进程 PID $procId`: $_"
-            }
+        } catch {
+            # ignore unavailable or protected processes
         }
     }
 }
 
-# ---------- 解析端口 ----------
 if ($BackendPort -eq 0) {
     $BackendPort = [int](Get-EnvValue -Key "APP_PORT" -DefaultValue "18739")
 }
-if ($FrontendPort -eq 0) {
-    $FrontendPort = [int](Get-EnvValue -Key "STREAMLIT_PORT" -DefaultValue "18510")
-}
 
-$pythonCmd = Get-PythonExecutable
-if (-not $pythonCmd) {
-    Write-Error "未找到 Python 解释器，请确保已安装 Python 并加入 PATH"
-    exit 1
-}
-Write-Host "使用 Python: $pythonCmd" -ForegroundColor Gray
-
-# ---------- 依赖检查与安装 ----------
-Write-Host "`n[1/5] 检查项目依赖..." -ForegroundColor Yellow
-$missingDeps = @()
-foreach ($module in @("fastapi", "uvicorn", "streamlit", "langgraph", "langchain_openai", "pydantic", "pydantic_settings")) {
-    & $pythonCmd -c "import $module" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { $missingDeps += $module }
-}
-
-if ($missingDeps.Count -gt 0) {
-    Write-Host "检测到缺少依赖: $($missingDeps -join ', ')" -ForegroundColor Red
-    Write-Host "正在执行 pip install -e . ..." -ForegroundColor Yellow
-    & $pythonCmd -m pip install -e .
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "依赖安装失败，请检查网络或 pip 配置"
-        exit 1
+$pythonCmd = $null
+foreach ($cmd in @("python", "py", "python3")) {
+    if (Get-Command $cmd -ErrorAction SilentlyContinue) {
+        $pythonCmd = $cmd
+        break
     }
 }
-else {
-    Write-Host "依赖检查通过" -ForegroundColor Green
+if (-not $pythonCmd) {
+    Write-Error "Python not found in PATH"
+    exit 1
+}
+Write-Host "Python: $pythonCmd" -ForegroundColor Gray
+
+Write-Host "`n[1/3] Check deps..." -ForegroundColor Yellow
+$missing = @()
+foreach ($module in @("fastapi", "uvicorn", "langgraph", "langchain_openai", "pydantic", "pydantic_settings", "httpx")) {
+    & $pythonCmd -c "import $module" 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) { $missing += $module }
+}
+if ($missing.Count -gt 0) {
+    Write-Host "Missing: $($missing -join ', ')" -ForegroundColor Red
+    Write-Host "pip install -e ." -ForegroundColor Yellow
+    & $pythonCmd -m pip install -e .
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "pip install failed"
+        exit 1
+    }
+} else {
+    Write-Host "  OK" -ForegroundColor Green
 }
 
-# ---------- 停止占用目标端口的旧进程 ----------
-Write-Host "`n[2/5] 停止占用目标端口的旧进程..." -ForegroundColor Yellow
+Write-Host "`n[2/3] Clear port $BackendPort..." -ForegroundColor Yellow
 if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
-if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
-Start-Sleep -Seconds 2
+Start-Sleep -Seconds 1
 
-# ---------- 启动后端 ----------
 $backendProc = $null
 if (-not $SkipBackend) {
-    Write-Host "`n[3/5] 启动后端 FastAPI (端口 $BackendPort)..." -ForegroundColor Yellow
-    $backendArgs = "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload"
-    $backendProc = Start-Process -FilePath $pythonCmd -ArgumentList $backendArgs `
-        -WorkingDirectory $scriptDir -WindowStyle Normal -PassThru
+    Write-Host "`n[3/3] Start FastAPI on port $BackendPort ..." -ForegroundColor Yellow
+    $backendProc = Start-Process -FilePath $pythonCmd `
+        -ArgumentList "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload" `
+        -WorkingDirectory $projectDir -WindowStyle Normal -PassThru
     Start-Sleep -Seconds 3
 }
 
-# ---------- 启动前端 ----------
-$frontendProc = $null
-if (-not $SkipFrontend) {
-    Write-Host "`n[4/5] 启动前端 Streamlit (端口 $FrontendPort)..." -ForegroundColor Yellow
-    $frontendArgs = "-m streamlit run frontend/app.py --server.port $FrontendPort --server.headless true"
-    $frontendProc = Start-Process -FilePath $pythonCmd -ArgumentList $frontendArgs `
-        -WorkingDirectory $scriptDir -WindowStyle Normal -PassThru
-    Start-Sleep -Seconds 5
-}
-
-# ---------- 输出访问地址 ----------
 Write-Host "`n============================================" -ForegroundColor Green
-Write-Host "  青禾映画服务已启动" -ForegroundColor Green
-if (-not $SkipBackend) {
-    Write-Host "  后端 API:    http://localhost:$BackendPort/docs" -ForegroundColor Green
-    Write-Host "  健康检查:    http://localhost:$BackendPort/api/health" -ForegroundColor Green
-}
-if (-not $SkipFrontend) {
-    Write-Host "  前端页面:    http://localhost:$FrontendPort" -ForegroundColor Green
-}
+Write-Host "  OK!" -ForegroundColor Green
+Write-Host "  Frontend: http://localhost:$BackendPort/" -ForegroundColor Green
+Write-Host "  API Docs: http://localhost:$BackendPort/docs" -ForegroundColor Green
+Write-Host "  Health:   http://localhost:$BackendPort/api/health" -ForegroundColor Green
 Write-Host "============================================" -ForegroundColor Green
-Write-Host "`n按任意键停止服务..." -ForegroundColor Gray
+Write-Host "`nPress any key to stop..." -ForegroundColor Gray
 
-# ---------- 等待停止 ----------
 $null = [System.Console]::ReadKey($true)
 
-Write-Host "`n[5/5] 正在停止服务..." -ForegroundColor Yellow
+Write-Host "`nStopping..." -ForegroundColor Yellow
 if ($backendProc -and -not $backendProc.HasExited) {
     Stop-Process -Id $backendProc.Id -Force -ErrorAction SilentlyContinue
 }
-if ($frontendProc -and -not $frontendProc.HasExited) {
-    Stop-Process -Id $frontendProc.Id -Force -ErrorAction SilentlyContinue
-}
-
-# 额外清理可能残留的端口进程
 if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
-if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
-
-Write-Host "服务已停止" -ForegroundColor Green
+Write-Host "Done." -ForegroundColor Green

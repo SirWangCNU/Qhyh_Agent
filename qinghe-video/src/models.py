@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # ============================================================
@@ -146,6 +146,15 @@ class ShotPrompt(BaseModel):
     recommended_tool: str
     aspect_ratio: str
     reference_style: str
+
+    @model_validator(mode="before")
+    @classmethod
+    def normalize_shot_id(cls, data):
+        """兼容 LLM 偶发将 shot_id 写成 pitch_id 的情况。"""
+        if isinstance(data, dict) and "shot_id" not in data and "pitch_id" in data:
+            data = dict(data)
+            data["shot_id"] = data.pop("pitch_id")
+        return data
 
 
 class VisualOutput(BaseModel):

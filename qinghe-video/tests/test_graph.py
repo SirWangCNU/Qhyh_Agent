@@ -9,6 +9,7 @@ from src.models import (
     DistributorOutput,
     PlannerOutput,
     ScriptwriterOutput,
+    ShotPrompt,
     VisualOutput,
 )
 from src.state import QingheState
@@ -58,6 +59,23 @@ def test_planner_output_valid():
     )
     assert out.video_type == "原产地溯源"
     assert len(out.core_selling_points) == 2
+
+
+def test_visual_shot_prompt_normalizes_pitch_id():
+    """视觉 Prompt 应兼容 LLM 偶发输出的 pitch_id 字段。"""
+    shot = ShotPrompt.model_validate(
+        {
+            "pitch_id": 5,
+            "prompt": "fresh peach orchard in warm morning light, realistic photography",
+            "negative_prompt": "low quality, blurry",
+            "recommended_tool": "doubao-seedream",
+            "aspect_ratio": "9:16",
+            "reference_style": "农业纪录片质感",
+        }
+    )
+
+    assert shot.shot_id == 5
+    assert "pitch_id" not in shot.model_dump()
 
 
 def test_graph_builds_without_error():

@@ -43,6 +43,25 @@ class Settings(BaseSettings):
     STREAMLIT_PORT: int = 18510
     BACKEND_URL: str = "http://localhost:18739"
 
+    # ---------- 图片生成配置（OpenAI 兼容中转站） ----------
+    APILINK_API_BASE_URL: str = "https://agaigw.com"
+    AIAPIAL_API_KEY: str = ""
+    IMAGE_MODEL: str = "doubao-seedream-5-0-260128"
+    IMAGE_SIZE: str = "1920x1920"
+    IMAGE_RESPONSE_FORMAT: str = "url"
+    VIDEO_MODEL: str = "doubao-seedance-2-0-260128"
+    VIDEO_SIZE: str = "1280x720"
+
+    # ---------- TTS 配音配置 ----------
+    tts_voice: str = "zh-CN-XiaoxiaoNeural"
+    tts_rate: str = "+0%"
+    tts_volume: str = "+0%"
+
+    # ---------- 视频合成配置 ----------
+    video_fps: int = 30
+    video_resolution: str = "1080x1920"
+    video_per_image_duration: float = 3.5
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

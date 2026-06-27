@@ -12,9 +12,10 @@ from __future__ import annotations
 import json
 import logging
 import uuid
+from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,9 +23,13 @@ from pathlib import Path
 from pydantic import BaseModel
 
 from src.agent_steps import AgentStep, AgentStepRequest, run_agent_step
+from src.auth.dependencies import get_current_user
+from src.auth.router import router as auth_router
 from src.config import settings
+from src.db.models import User
 from src.graph import app_graph
 from src.image_generation import ImageGenerationRequest, generate_image
+from src.image_studio import image_studio_router
 from src.models import UserInput
 from src.tts_service import synthesize as tts_synthesize, _synthesize_async
 from src.video_compose import compose as compose_video
@@ -39,11 +44,23 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ---------- FastAPI 应用 ----------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """应用生命周期管理。"""
+    yield
+
 app = FastAPI(
     title="青禾映画 API",
     description="LangGraph 多 Agent 协同农业短视频创作平台 MVP",
     version="0.1.0",
+    lifespan=lifespan,
 )
+
+# 注册鉴权路由
+app.include_router(auth_router)
+# 注册图像处理工作室路由
+app.include_router(image_studio_router)
 
 # 允许前端跨域访问
 app.add_middleware(
@@ -80,6 +97,17 @@ def index():
     return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
 
 
+@app.get("/chat", summary="对话创作页面")
+@app.get("/plan", summary="规划设计页面")
+@app.get("/agents", summary="Agent 管理页面")
+def spa_routes():
+    """SPA 路由兼容：/chat、/plan、/agents 均返回同一 index.html。"""
+    index_file = _FRONTEND_DIR / "index.html"
+    if not index_file.exists():
+        raise HTTPException(status_code=404, detail="前端页面未找到")
+    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+
+
 @app.get("/api/health", summary="健康检查")
 def health() -> dict[str, str]:
     """健康检查接口。"""
@@ -87,7 +115,7 @@ def health() -> dict[str, str]:
 
 
 @app.post("/api/agents/{step}", summary="单步执行 Agent")
-def run_agent_step_api(step: AgentStep, payload: AgentStepRequest) -> dict[str, Any]:
+def run_agent_step_api(step: AgentStep, payload: AgentStepRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """按步骤单独执行指定 Agent，并返回累计状态。"""
     try:
         result = run_agent_step(step, payload)
@@ -101,7 +129,7 @@ def run_agent_step_api(step: AgentStep, payload: AgentStepRequest) -> dict[str, 
 
 
 @app.post("/api/images/generate", summary="生成图片素材")
-async def generate_image_asset(payload: ImageGenerationRequest) -> dict[str, Any]:
+async def generate_image_asset(payload: ImageGenerationRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """使用配置的图片模型生成视觉素材。"""
     try:
         images = await generate_image(payload)
@@ -118,7 +146,7 @@ async def generate_image_asset(payload: ImageGenerationRequest) -> dict[str, Any
 
 
 @app.post("/api/videos/generate", summary="生成视频素材预览")
-def generate_video_asset(payload: VideoGenerationRequest) -> dict[str, Any]:
+def generate_video_asset(payload: VideoGenerationRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """返回视频生成展示配置；真实视频生成协议接入后替换此实现。"""
     return build_video_preview(payload)
 
@@ -132,7 +160,7 @@ class TTSRequest(BaseModel):
 
 
 @app.post("/api/tts/generate", summary="合成旁白配音")
-async def generate_tts(req: TTSRequest) -> dict[str, Any]:
+async def generate_tts(req: TTSRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """使用 edge-tts 将文本合成为 mp3 音频，写入 outputs/audio/ 目录。
 
     返回字段：
@@ -172,7 +200,7 @@ class VideoComposeRequest(BaseModel):
 
 
 @app.post("/api/video/compose", summary="合成竖屏 mp4 视频")
-async def compose_video_endpoint(req: VideoComposeRequest) -> dict[str, Any]:
+async def compose_video_endpoint(req: VideoComposeRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """把分镜图片轮播 + TTS 旁白拼接为 9:16 竖屏 mp4。
 
     返回字段：
@@ -206,7 +234,7 @@ async def compose_video_endpoint(req: VideoComposeRequest) -> dict[str, Any]:
 
 # ---------- 一键成片 ----------
 @app.post("/api/video/mvp", summary="一键成片（分镜取图 → TTS → 视频合成）")
-async def video_mvp_endpoint(req: VideoMvpRequest) -> dict[str, Any]:
+async def video_mvp_endpoint(req: VideoMvpRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """一键成片：从 workshop state 取分镜 prompt → 逐镜生图 → TTS 合成 → 视频合成。
 
     请求体传入完整流水线 state（至少含 ``visual_output.shot_prompts``，
@@ -230,7 +258,7 @@ async def video_mvp_endpoint(req: VideoMvpRequest) -> dict[str, Any]:
 
 
 @app.post("/api/generate", summary="生成短视频创作方案")
-def generate(payload: UserInput) -> dict[str, Any]:
+def generate(payload: UserInput, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
     """运行完整多 Agent 流水线，返回创作方案。
 
     Args:
@@ -277,7 +305,7 @@ def generate(payload: UserInput) -> dict[str, Any]:
 
 
 @app.post("/api/generate/stream", summary="流式生成短视频创作方案")
-async def generate_stream(payload: UserInput):
+async def generate_stream(payload: UserInput, _current_user: User = Depends(get_current_user)):
     """以 SSE 方式流式返回每个 Agent 的执行进度与最终结果。
 
     Args:

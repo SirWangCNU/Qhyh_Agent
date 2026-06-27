@@ -104,6 +104,7 @@
   var form = Q.form;
   var pipeline = Q.pipeline;
   var result = Q.result;
+  var sidebar = Q.sidebar;
 
   function startGenerate() {
     // 校验
@@ -118,6 +119,7 @@
     var payload = v.data;
 
     // 重置并锁定
+    if (sidebar) { sidebar.showProgress(); sidebar.resetProgress(); }
     pipeline.resetNodes();
     pipeline.setProgress(0, "正在连接后端…");
     pipeline.setStatus("正在连接后端服务…");
@@ -186,6 +188,7 @@
               }
             });
             pipeline.setStatus("✅ 创作方案生成完成 · Task " + (taskId || "—"), "success");
+            if (sidebar) sidebar.refresh();
             if (finalResult) result.show(finalResult, taskId);
           }
         });

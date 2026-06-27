@@ -52,6 +52,11 @@ class Settings(BaseSettings):
     VIDEO_MODEL: str = "doubao-seedance-2-0-260128"
     VIDEO_SIZE: str = "1280x720"
 
+    # ---------- 图像处理工作室配置（九宫格导演板） ----------
+    IMAGE_STUDIO_CELL_SIZE: str = "640x640"     # 九宫格单格尺寸
+    IMAGE_STUDIO_GRID_GAP: int = 16             # 九宫格间距
+    IMAGE_STUDIO_LABEL_HEIGHT: int = 40         # 标签条高度
+
     # ---------- TTS 配音配置 ----------
     tts_voice: str = "zh-CN-XiaoxiaoNeural"
     tts_rate: str = "+0%"
@@ -61,6 +66,14 @@ class Settings(BaseSettings):
     video_fps: int = 30
     video_resolution: str = "1080x1920"
     video_per_image_duration: float = 3.5
+
+    # ---------- 鉴权与数据库配置 ----------
+    SQLITE_PATH: str = "qinghe.db"
+    JWT_SECRET: str = "qinghe-dev-secret-change-me"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24        # 24 小时
+    ADMIN_USERNAME: str = "admin"
+    ADMIN_PASSWORD: str = "admin123"
 
 
 @lru_cache(maxsize=1)

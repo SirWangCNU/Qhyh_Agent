@@ -69,6 +69,7 @@ window.Qinghe = window.Qinghe || {};
   // 更新状态行
   function setStatus(text, type) {
     if (statusText) statusText.innerHTML = text;
+    if (!statusLine) return;
     statusLine.classList.remove("is-success", "is-error");
     if (type) statusLine.classList.add("is-" + type);
   }

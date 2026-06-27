@@ -1,0 +1,272 @@
+/* ============================================================
+   auth.css · 登录/注册遮罩样式
+   复用青禾映画编辑式有机风设计系统
+   ============================================================ */
+
+/* ---------- 遮罩层 ---------- */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(245, 241, 232, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.auth-overlay[hidden] {
+  display: none;
+}
+
+.auth-overlay.is-hiding {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ---------- 卡片 ---------- */
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  padding: 40px 36px 36px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 顶部装饰线 */
+.auth-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--color-brand), var(--color-accent), var(--color-brand));
+}
+
+/* ---------- 品牌图标 ---------- */
+.auth-card__brand {
+  margin-bottom: 16px;
+}
+
+.auth-card__brand svg {
+  width: 48px;
+  height: 48px;
+  color: var(--color-brand);
+  opacity: 0.85;
+}
+
+/* ---------- 标题 ---------- */
+.auth-card__title {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 500;
+  color: var(--color-ink);
+  margin-bottom: 8px;
+  letter-spacing: 0.01em;
+}
+
+.auth-card__subtitle {
+  font-size: 0.875rem;
+  color: var(--color-ink-soft);
+  margin-bottom: 28px;
+}
+
+/* ---------- 表单 ---------- */
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.auth-form[hidden] {
+  display: none;
+}
+
+/* 输入组 */
+.auth-field {
+  position: relative;
+  text-align: left;
+}
+
+.auth-field label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--color-ink-soft);
+  margin-bottom: 6px;
+}
+
+.auth-field input {
+  width: 100%;
+  padding: 10px 0;
+  border: none;
+  border-bottom: 1.5px solid var(--color-border-strong);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  color: var(--color-ink);
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.auth-field input::placeholder {
+  color: var(--color-ink-faint);
+}
+
+.auth-field input:focus {
+  border-bottom-color: var(--color-brand);
+}
+
+/* ---------- 按钮 ---------- */
+.auth-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  padding: 12px 24px;
+  margin-top: 8px;
+  border: none;
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.1s ease;
+}
+
+.auth-btn:active {
+  transform: scale(0.98);
+}
+
+.auth-btn--primary {
+  background: var(--color-brand);
+  color: #fff;
+}
+
+.auth-btn--primary:hover {
+  background: var(--color-brand-deep);
+}
+
+.auth-btn--primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* ---------- 错误提示 ---------- */
+.auth-error {
+  font-size: 0.825rem;
+  color: var(--color-warn);
+  min-height: 1.2em;
+  text-align: left;
+  margin-top: -8px;
+}
+
+.auth-error:empty {
+  display: none;
+}
+
+/* ---------- 切换链接 ---------- */
+.auth-toggle {
+  margin-top: 20px;
+  font-size: 0.85rem;
+  color: var(--color-ink-soft);
+}
+
+.auth-toggle a {
+  color: var(--color-accent);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.auth-toggle a:hover {
+  text-decoration: underline;
+}
+
+/* ---------- 提示信息 ---------- */
+.auth-hint {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  color: var(--color-ink-faint);
+  line-height: 1.5;
+}
+
+.auth-hint code {
+  font-family: var(--font-mono);
+  background: var(--color-bg);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+/* ---------- 导航栏登出按钮 ---------- */
+.nav__logout {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--color-ink-soft);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-left: 12px;
+}
+
+.nav__logout:hover {
+  background: var(--color-warn);
+  border-color: var(--color-warn);
+  color: #fff;
+}
+
+.nav__logout[hidden] {
+  display: none;
+}
+
+/* ---------- 加载旋转 ---------- */
+.auth-btn--loading {
+  position: relative;
+  color: transparent !important;
+}
+
+.auth-btn--loading::after {
+  content: "";
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: auth-spin 0.6s linear infinite;
+}
+
+@keyframes auth-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 32px 24px 28px;
+  }
+
+  .auth-card__title {
+    font-size: 1.3rem;
+  }
+}

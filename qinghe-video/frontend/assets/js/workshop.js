@@ -14,12 +14,12 @@ window.Qinghe = window.Qinghe || {};
   var VIDEO_API = BACKEND_URL + "/api/videos/generate";
 
   var STEPS = [
-    { key: "planner", num: "01", title: "策划 Agent", kicker: "Planner", desc: "先确定主题方向、核心卖点与目标受众。" },
-    { key: "copywriter", num: "02", title: "文案 Agent", kicker: "Copywriter", desc: "撰写 Hook、口播正文与行动号召。" },
-    { key: "scriptwriter", num: "03", title: "脚本 Agent", kicker: "Scriptwriter", desc: "把文案拆成可拍摄的分镜脚本与运镜。" },
-    { key: "visual_designer", num: "04", title: "视觉 Agent", kicker: "Visual Designer", desc: "为每个镜头生成英文 AI 生图 / 生视频 Prompt。" },
-    { key: "distributor", num: "05", title: "投放 Agent", kicker: "Distributor", desc: "制定标题、标签、发布时间与推广策略。" },
-    { key: "report_generator", num: "06", title: "报告生成", kicker: "Report", desc: "把前五步汇总成一份完整 Markdown 方案。" }
+    { key: "planner", num: "01", title: "策划 Agent", kicker: "PLANNER", desc: "先确定主题方向、核心卖点与目标受众。", tagline: "主题、受众、卖点" },
+    { key: "copywriter", num: "02", title: "文案 Agent", kicker: "COPYWRITER", desc: "撰写 Hook、口播正文与行动号召。", tagline: "Hook、口播、CTA" },
+    { key: "scriptwriter", num: "03", title: "脚本 Agent", kicker: "SCRIPTWRITER", desc: "把文案拆成可拍摄的分镜脚本与运镜。", tagline: "分镜、运镜、BGM" },
+    { key: "visual_designer", num: "04", title: "视觉 Agent", kicker: "VISUAL DESIGNER", desc: "为每个镜头生成英文 AI 生图 / 生视频 Prompt。", tagline: "图片 / 视频 Prompt" },
+    { key: "distributor", num: "05", title: "投放 Agent", kicker: "DISTRIBUTOR", desc: "制定标题、标签、发布时间与推广策略。", tagline: "标题、标签、策略" },
+    { key: "report_generator", num: "06", title: "报告生成", kicker: "REPORT", desc: "把前五步汇总成一份完整 Markdown 方案。", tagline: "汇总成完整方案" }
   ];
 
   var rail = document.getElementById("stepRail");
@@ -34,6 +34,7 @@ window.Qinghe = window.Qinghe || {};
   var vidBtn = document.getElementById("stepGenerateVideo");
   var imgGallery = document.getElementById("stepImageGallery");
   var videoPreview = document.getElementById("videoPreview");
+  var videoResult = document.getElementById("videoResult");
 
   // 工坊共享状态：保留每一步累计后的全局 state，供下一步与素材生成使用
   var workshopState = {};
@@ -41,6 +42,10 @@ window.Qinghe = window.Qinghe || {};
   var activeStep = "planner";
   var doneSteps = {};
   var lastError = null;
+  // 每步输出内容缓存：{ planner: "<div>...</div>", copywriter: "<div>...</div>", ... }
+  var stepOutputs = {};
+  // 每步的瞬时态（loading/error）标记，不持久化
+  var stepStatus = {}; // { planner: "loading"|"error"|null, ... }
 
   function escapeHtml(s) {
     return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -63,11 +68,62 @@ window.Qinghe = window.Qinghe || {};
     );
   }
 
-  function setOutput(text, kind) {
+  // 空态 / 等待态
+  var WHEAT_SVG = '<svg viewBox="0 0 48 64" width="48" height="64" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'
+    + '<path d="M24 62V28" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+    + '<ellipse cx="24" cy="10" rx="4" ry="6" fill="currentColor" opacity="0.7"/>'
+    + '<ellipse cx="18" cy="14" rx="3.5" ry="5.5" fill="currentColor" opacity="0.6" transform="rotate(-25 18 14)"/>'
+    + '<ellipse cx="30" cy="14" rx="3.5" ry="5.5" fill="currentColor" opacity="0.6" transform="rotate(25 30 14)"/>'
+    + '<ellipse cx="17" cy="21" rx="3.5" ry="5.5" fill="currentColor" opacity="0.5" transform="rotate(-30 17 21)"/>'
+    + '<ellipse cx="31" cy="21" rx="3.5" ry="5.5" fill="currentColor" opacity="0.5" transform="rotate(30 31 21)"/>'
+    + '<path d="M24 36 Q14 32 10 40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5"/>'
+    + '<path d="M24 36 Q34 32 38 40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.5"/>'
+    + '</svg>';
+
+  function emptyStateHtml(meta) {
+    return (
+      '<div class="step-empty">'
+      + '<div class="step-empty__icon" style="color:var(--color-brand)">' + WHEAT_SVG + '</div>'
+      + '<p class="step-empty__title">等待执行' + (meta ? " · " + escapeHtml(meta.title) : "") + '</p>'
+      + '<p class="step-empty__desc">点击右上角「执行当前步骤」，' + escapeHtml(meta ? meta.desc : "开始这一步") + '</p>'
+      + '</div>'
+    );
+  }
+
+  // 切换显示某步骤的输出内容（核心修复点）
+  function displayStepOutput(stepKey) {
     if (!stepOutput) return;
     stepOutput.classList.remove("is-error", "is-loading");
-    if (kind) stepOutput.classList.add(kind);
-    stepOutput.innerHTML = text;
+
+    // 先检查瞬时状态
+    if (stepStatus[stepKey] === "loading") {
+      stepOutput.classList.add("is-loading");
+      stepOutput.innerHTML = '<span style="color:#8fb3d1">⏳ 正在执行 ' + escapeHtml(stepKey) + '…</span>';
+      return;
+    }
+    if (stepStatus[stepKey] === "error") {
+      stepOutput.classList.add("is-error");
+      var errInfo = lastError && lastError.step === stepKey ? lastError.error : "该步骤执行出错";
+      stepOutput.innerHTML = '<span style="color:#e0a96d">执行出错：</span>\n\n' + escapeHtml(errInfo);
+      return;
+    }
+
+    // 检查缓存输出
+    if (stepOutputs[stepKey]) {
+      stepOutput.innerHTML = stepOutputs[stepKey];
+      return;
+    }
+
+    // 未执行 → 空态
+    var meta = STEPS.filter(function (s) { return s.key === stepKey; })[0];
+    stepOutput.innerHTML = emptyStateHtml(meta);
+  }
+
+  // setOutput 改为将结果缓存到当前 step，再刷新视图
+  function setOutput(text, kind) {
+    stepOutputs[activeStep] = text;
+    stepStatus[activeStep] = null;
+    displayStepOutput(activeStep);
   }
 
   function setActiveStep(stepKey) {
@@ -83,6 +139,9 @@ window.Qinghe = window.Qinghe || {};
         card.classList.toggle("is-active", card.getAttribute("data-step") === stepKey);
       });
     }
+
+    // 核心修复：切换步骤时切换输出显示，不再复用前一步骤内容
+    displayStepOutput(stepKey);
   }
 
   function refreshRailStatus() {
@@ -90,7 +149,7 @@ window.Qinghe = window.Qinghe || {};
     rail.querySelectorAll(".step-card").forEach(function (card) {
       var key = card.getAttribute("data-step");
       card.classList.toggle("is-done", !!doneSteps[key]);
-      card.classList.toggle("is-error", lastError && lastError.step === key);
+      card.classList.toggle("is-error", !!(lastError && lastError.step === key));
     });
   }
 
@@ -121,14 +180,21 @@ window.Qinghe = window.Qinghe || {};
   function runStep() {
     var v = validateInput();
     if (!v.ok) {
-      setOutput('<span style="color:#e0a96d">' + escapeHtml(v.message) + "</span>", "is-error");
+      stepStatus[activeStep] = "error";
+      lastError = { step: activeStep, error: v.message };
+      displayStepOutput(activeStep);
+      refreshRailStatus();
       var el = document.getElementById("product_name");
       if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
     userInput = v.data;
 
-    setOutput('<span style="color:#8fb3d1">⏳ 正在执行 ' + escapeHtml(activeStep) + '…</span>', "is-loading");
+    // 设置 loading 状态
+    stepStatus[activeStep] = "loading";
+    lastError = null;
+    displayStepOutput(activeStep);
+    refreshRailStatus();
     if (runBtn) { runBtn.disabled = true; runBtn.textContent = "执行中…"; }
 
     var payload = { input: userInput, state: workshopState };
@@ -149,21 +215,24 @@ window.Qinghe = window.Qinghe || {};
       if (data.status === "success") {
         doneSteps[activeStep] = true;
         lastError = null;
-        // Task 4：按 Agent 字段结构化渲染，替代把 JSON 塞进 <pre>
+        stepStatus[activeStep] = null;
         var renderer = Q.agentRender && Q.agentRender.renderAgentOutput;
-        setOutput(renderer ? renderer(activeStep, data.output) : highlightJson(data.output), "");
+        stepOutputs[activeStep] = renderer ? renderer(activeStep, data.output) : highlightJson(data.output);
       } else {
-        lastError = { step: activeStep, error: data.error };
-        setOutput(
-          '<span style="color:#e0a96d">执行出错：</span>\n\n' + escapeHtml(data.error || "未知错误"),
-          "is-error"
-        );
+        lastError = { step: activeStep, error: data.error || "未知错误" };
+        stepStatus[activeStep] = "error";
+        delete stepOutputs[activeStep];
       }
       refreshRailStatus();
+      displayStepOutput(activeStep);
     }).catch(function (err) {
       var msg = err && err.message ? err.message : String(err);
       if (/Failed to fetch/i.test(msg)) msg = "无法连接后端（" + BACKEND_URL + "），请确认服务已启动";
-      setOutput('<span style="color:#e0a96d">请求失败：</span> ' + escapeHtml(msg), "is-error");
+      lastError = { step: activeStep, error: msg };
+      stepStatus[activeStep] = "error";
+      delete stepOutputs[activeStep];
+      refreshRailStatus();
+      displayStepOutput(activeStep);
     }).finally(function () {
       if (runBtn) { runBtn.disabled = false; runBtn.textContent = "执行当前步骤"; }
     });
@@ -212,14 +281,12 @@ window.Qinghe = window.Qinghe || {};
       : "default";
   }
 
-  // Task 5：图片生成状态。currentImagePrompts 保存当前批次的 prompts，
-  // 供「重生 / 重试」按钮按 index 取回对应 prompt；imageGenRemaining 用于主按钮恢复。
+  // Task 5：图片生成状态
   var currentImagePrompts = [];
   var imageGenRemaining = 0;
 
   function imageCardId(index) { return "image-card-" + index; }
 
-  // 骨架屏卡片：灰色脉冲占位，请求完成后由 updateCard* 替换
   function renderSkeletonCard(index, promptItem) {
     return (
       '<article class="image-card image-card--loading" id="' + imageCardId(index) + '" data-index="' + index + '">'
@@ -284,7 +351,6 @@ window.Qinghe = window.Qinghe || {};
     updateCard(index, renderImageCardError(index, promptItem, errMsg));
   }
 
-  // 单张图片请求；成功/失败各自更新对应卡片。trackProgress=false 时不影响主按钮（用于重生/重试）。
   function fetchSingleImage(index, promptItem, trackProgress) {
     updateCardToLoading(index, promptItem);
     fetch(IMAGE_API, {
@@ -316,7 +382,6 @@ window.Qinghe = window.Qinghe || {};
     });
   }
 
-  // 单张重生 / 失败重试：按 index 取回当前批次的 prompt，独立请求，不影响主按钮状态
   function regenerateSingleImage(index, promptItem) {
     fetchSingleImage(index, promptItem, false);
   }
@@ -351,13 +416,11 @@ window.Qinghe = window.Qinghe || {};
         ? '<span style="color:var(--color-accent)">使用视觉 Agent 输出的分镜 Prompt</span>'
         : '<span style="color:var(--color-ink-soft)">使用默认模板分镜（未执行视觉 Agent）</span>';
       var hint = '<p class="image-gallery__hint">' + sourceLabel + ' · 正在逐张调用 seedream 生成图片素材，请稍候…</p>';
-      // 先渲染 N 张骨架卡片，再逐张独立请求
       var cards = prompts.map(function (item, i) { return renderSkeletonCard(i, item); }).join("");
       imgGallery.innerHTML = hint + cards;
     }
     if (imgBtn) { imgBtn.disabled = true; imgBtn.textContent = "生成中…"; }
 
-    // 逐张独立请求：互不阻塞，单张失败不影响其它
     prompts.forEach(function (item, i) {
       fetchSingleImage(i, item, true);
     });
@@ -439,10 +502,19 @@ window.Qinghe = window.Qinghe || {};
       workshopState = {};
       doneSteps = {};
       lastError = null;
+      stepOutputs = {};
+      stepStatus = {};
+      userInput = null;
       refreshRailStatus();
-      setOutput("等待执行 · 当前步骤产物会显示在这里");
-      if (imgGallery) imgGallery.classList.add("is-hidden");
-      if (videoPreview) videoPreview.classList.add("is-hidden");
+      setActiveStep("planner");
+      if (imgGallery) { imgGallery.classList.add("is-hidden"); imgGallery.innerHTML = ""; }
+      if (videoPreview) { videoPreview.classList.add("is-hidden"); videoPreview.innerHTML = ""; }
+      if (videoResult) { videoResult.classList.add("is-hidden"); videoResult.innerHTML = ""; }
     }
   };
+
+  // 初始化：根据 HTML 中已标记 is-active 的卡片设置初始步骤
+  var initialCard = rail ? rail.querySelector(".step-card.is-active") : null;
+  var initialStep = initialCard ? initialCard.getAttribute("data-step") : "planner";
+  setActiveStep(initialStep);
 })(window.Qinghe);

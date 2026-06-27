@@ -1,0 +1,429 @@
+/* ============================================================
+   agents.css · Agent 管理页面
+   农事有机主题，复用 workshop.css 的 Agent 配色
+   ============================================================ */
+
+/* ---------- 页面容器 ---------- */
+.agents-page {
+  padding: 56px 0 80px;
+  min-height: calc(100vh - 64px);
+}
+
+.agents-page .module__head {
+  margin-bottom: 36px;
+}
+
+/* ---------- 工作台：网格 + 详情面板 ---------- */
+.agents-workbench {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 28px;
+  align-items: start;
+}
+
+/* ---------- Agent 网格 ---------- */
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* ---------- Agent 卡片 ---------- */
+.agent-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(.2,.8,.2,1),
+              border-color 0.22s ease,
+              box-shadow 0.22s ease;
+  text-align: left;
+  overflow: hidden;
+}
+
+.agent-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: transparent;
+  border-radius: 0 2px 2px 0;
+  transition: background 0.22s ease;
+}
+
+.agent-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--color-border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.agent-card.is-active {
+  border-color: var(--color-brand);
+  box-shadow: 0 8px 26px rgba(61, 90, 61, 0.14);
+}
+
+.agent-card.is-active::before {
+  background: var(--color-brand);
+}
+
+.agent-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.agent-card__avatar {
+  flex-shrink: 0;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  line-height: 1;
+  box-shadow: 0 4px 12px rgba(31, 31, 31, 0.08);
+}
+
+/* 6 个 Agent 配色（与 workshop.css 保持一致） */
+.agent-card__avatar--planner {
+  background: linear-gradient(135deg, #3d5a3d, #4a6d4a);
+  color: #e8f0e8;
+}
+.agent-card__avatar--copywriter {
+  background: linear-gradient(135deg, #c9a961, #d4b872);
+  color: #3d2d0f;
+}
+.agent-card__avatar--scriptwriter {
+  background: linear-gradient(135deg, #b85c38, #c96d45);
+  color: #fdf2ed;
+}
+.agent-card__avatar--visual {
+  background: linear-gradient(135deg, #4a7c9b, #5a8dac);
+  color: #edf4f8;
+}
+.agent-card__avatar--distributor {
+  background: linear-gradient(135deg, #2d4a2b, #3d5d3a);
+  color: #e8f0e8;
+}
+.agent-card__avatar--report {
+  background: linear-gradient(135deg, #6b5238, #7d6346);
+  color: #f5efe6;
+}
+
+.agent-card__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.agent-card__title strong {
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.agent-card__title small {
+  font-family: var(--font-mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+}
+
+.agent-card__desc {
+  font-size: 0.86rem;
+  color: var(--color-ink-soft);
+  line-height: 1.55;
+  flex: 1 1 auto;
+}
+
+/* ---------- 状态徽章 ---------- */
+.agent-card__status {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.agent-card__status[data-status="idle"] {
+  background: var(--color-bg-alt);
+  color: var(--color-ink-soft);
+  border-color: var(--color-border-strong);
+}
+
+.agent-card__status[data-status="loading"] {
+  background: rgba(74, 124, 155, 0.12);
+  color: #4a7c9b;
+  border-color: rgba(74, 124, 155, 0.25);
+}
+
+.agent-card__status[data-status="success"] {
+  background: rgba(123, 158, 91, 0.12);
+  color: var(--color-success);
+  border-color: rgba(123, 158, 91, 0.25);
+}
+
+.agent-card__status[data-status="error"] {
+  background: rgba(184, 92, 56, 0.12);
+  color: var(--color-warn);
+  border-color: rgba(184, 92, 56, 0.25);
+}
+
+.agent-card__status::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.agent-card__status[data-status="loading"]::before {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  background: none;
+  animation: agent-status-spin 0.8s linear infinite;
+}
+
+@keyframes agent-status-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ---------- 详情面板 ---------- */
+.agent-detail {
+  position: sticky;
+  top: 88px;
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+}
+
+.agent-detail.is-hidden {
+  display: none;
+}
+
+.agent-detail__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.agent-detail__meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.agent-detail__avatar {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  line-height: 1;
+  box-shadow: 0 6px 16px rgba(31, 31, 31, 0.1);
+}
+
+.agent-detail__meta h3 {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--color-ink);
+  line-height: 1.2;
+}
+
+.agent-detail__meta p {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-ink-faint);
+  margin-top: 2px;
+}
+
+.agent-detail__desc {
+  font-size: 0.9rem;
+  color: var(--color-ink-soft);
+  line-height: 1.6;
+}
+
+/* ---------- 表单 ---------- */
+.agent-form {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.agent-form .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-form .field--full {
+  grid-column: 1 / -1;
+}
+
+.agent-form label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-ink);
+}
+
+.agent-form .input,
+.agent-form .textarea,
+.agent-form .select {
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--color-bg-alt);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--color-ink);
+  font-size: 0.92rem;
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.agent-form .textarea {
+  resize: vertical;
+  min-height: 72px;
+  line-height: 1.5;
+}
+
+.agent-form .input:focus,
+.agent-form .textarea:focus,
+.agent-form .select:focus {
+  outline: none;
+  border-color: var(--color-brand);
+  background: var(--color-surface);
+  box-shadow: 0 0 0 3px rgba(61, 90, 61, 0.1);
+}
+
+.agent-form .select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='none' stroke='%236b6357' stroke-width='1.5' d='M1 1.5l5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+}
+
+/* ---------- 操作区 ---------- */
+.agent-detail__actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.agent-detail__actions .btn {
+  flex: 1 1 auto;
+}
+
+/* ---------- 输出区 ---------- */
+.agent-output-host {
+  min-height: 180px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px;
+  border-top: 1px dashed var(--color-border-strong);
+  padding-top: 18px;
+}
+
+.agent-output-host.is-loading,
+.agent-output-host.is-error {
+  background: #1f1f1f;
+  color: #e8e2d5;
+  border-radius: var(--radius);
+  padding: 20px;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}
+
+.agent-output-host__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  min-height: 160px;
+  color: var(--color-ink-faint);
+  font-size: 0.9rem;
+}
+
+.agent-output-host__empty svg {
+  width: 44px;
+  height: 44px;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 1100px) {
+  .agents-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-detail {
+    position: static;
+    max-height: none;
+  }
+
+  .agents-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-form {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-detail__head {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .agent-detail__actions .btn {
+    flex: 1 1 100%;
+  }
+}

@@ -1,0 +1,296 @@
+/* ============================================================
+   image-studio.css · 图像处理工作室（九宫格导演板）
+   复用 style.css / workshop.css 的设计令牌（CSS 变量）
+   ============================================================ */
+
+.studio-container,
+#imageStudioPage .container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 24px 80px;
+}
+
+/* ---------- 表单 ---------- */
+.studio-form {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e8e4dc);
+  border-radius: var(--radius-lg, 16px);
+  padding: 28px;
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(31,31,31,0.06));
+  margin-bottom: 32px;
+}
+
+.studio-form__row {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 18px;
+  margin-bottom: 18px;
+  align-items: end;
+}
+
+.studio-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.studio-field--grow {
+  grid-column: 2;
+}
+
+.studio-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-ink-soft, #6b6b6b);
+  letter-spacing: 0.02em;
+}
+
+.studio-field input[type="text"],
+.studio-field select {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-strong, #d4cfc4);
+  border-radius: var(--radius, 8px);
+  font-size: 14px;
+  font-family: var(--font-body, "DM Sans", sans-serif);
+  background: var(--color-bg-alt, #faf9f6);
+  color: var(--color-ink, #1f1f1f);
+  transition: border-color 0.2s;
+}
+
+.studio-field input[type="text"]:focus,
+.studio-field select:focus {
+  outline: none;
+  border-color: var(--color-brand, #3d5a3d);
+  box-shadow: 0 0 0 3px rgba(61, 90, 61, 0.12);
+}
+
+/* ---------- 上传区 ---------- */
+.studio-upload {
+  position: relative;
+  border: 2px dashed var(--color-border-strong, #d4cfc4);
+  border-radius: var(--radius, 8px);
+  padding: 24px;
+  text-align: center;
+  background: var(--color-bg-alt, #faf9f6);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.studio-upload:hover,
+.studio-upload.is-dragover {
+  border-color: var(--color-brand, #3d5a3d);
+  background: rgba(61, 90, 61, 0.04);
+}
+
+.studio-upload input[type="file"] {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+  width: 100%;
+  height: 100%;
+}
+
+.studio-upload__hint {
+  font-size: 13px;
+  color: var(--color-ink-soft, #6b6b6b);
+}
+
+.studio-upload__hint img {
+  max-width: 180px;
+  max-height: 120px;
+  border-radius: var(--radius, 8px);
+  margin-top: 8px;
+}
+
+/* ---------- 提交按钮 ---------- */
+.studio-form__actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+}
+
+/* ---------- 状态提示 ---------- */
+.studio-status {
+  padding: 14px 18px;
+  border-radius: var(--radius, 8px);
+  margin-bottom: 24px;
+  font-size: 14px;
+  background: rgba(201, 169, 97, 0.12);
+  color: var(--color-accent, #c9a961);
+  border: 1px solid rgba(201, 169, 97, 0.3);
+}
+
+.studio-status.is-hidden {
+  display: none;
+}
+
+.studio-status--error {
+  background: rgba(184, 92, 56, 0.1);
+  color: var(--color-warn, #b85c38);
+  border-color: rgba(184, 92, 56, 0.3);
+}
+
+/* ---------- 9 格卡片网格 ---------- */
+.studio-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 32px;
+}
+
+.studio-card {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e8e4dc);
+  border-radius: var(--radius, 8px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--shadow-sm, 0 2px 8px rgba(31,31,31,0.04));
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.studio-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(31,31,31,0.06));
+}
+
+.studio-card--loading {
+  background: var(--color-bg-alt, #faf9f6);
+}
+
+.studio-card__skeleton {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: linear-gradient(90deg, #eceae5 25%, #f5f3ee 50%, #eceae5 75%);
+  background-size: 200% 100%;
+  animation: studio-skeleton 1.4s ease-in-out infinite;
+}
+
+@keyframes studio-skeleton {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.studio-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  display: block;
+}
+
+.studio-card__placeholder,
+.studio-card__error {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: var(--color-bg-alt, #faf9f6);
+  color: var(--color-ink-soft, #6b6b6b);
+  font-size: 13px;
+  text-align: center;
+  padding: 16px;
+}
+
+.studio-card__error-title {
+  color: var(--color-warn, #b85c38);
+  font-weight: 600;
+}
+
+.studio-card__body {
+  padding: 12px 14px;
+  border-top: 1px solid var(--color-border, #e8e4dc);
+}
+
+.studio-card__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-brand, #3d5a3d);
+  margin-bottom: 4px;
+}
+
+.studio-card__prompt {
+  font-size: 12px;
+  color: var(--color-ink-soft, #6b6b6b);
+  line-height: 1.5;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  max-height: 72px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+}
+
+/* ---------- 九宫格预览 ---------- */
+.studio-result {
+  background: var(--color-surface, #ffffff);
+  border: 1px solid var(--color-border, #e8e4dc);
+  border-radius: var(--radius-lg, 16px);
+  padding: 28px;
+  box-shadow: var(--shadow-md, 0 4px 16px rgba(31,31,31,0.06));
+}
+
+.studio-result.is-hidden {
+  display: none;
+}
+
+.studio-result__title {
+  font-family: var(--font-display, "Fraunces", serif);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--color-ink, #1f1f1f);
+  margin-bottom: 6px;
+}
+
+.studio-result__key {
+  font-size: 13px;
+  color: var(--color-ink-soft, #6b6b6b);
+  margin-bottom: 18px;
+  line-height: 1.6;
+}
+
+.studio-result__key code {
+  background: var(--color-bg-alt, #faf9f6);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 12px;
+}
+
+.studio-result__img {
+  width: 100%;
+  border-radius: var(--radius, 8px);
+  display: block;
+  margin-bottom: 18px;
+}
+
+.studio-result__actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ---------- 响应式 ---------- */
+@media (max-width: 900px) {
+  .studio-form__row {
+    grid-template-columns: 1fr;
+  }
+  .studio-field--grow {
+    grid-column: 1;
+  }
+  .studio-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 560px) {
+  .studio-grid {
+    grid-template-columns: 1fr;
+  }
+  #imageStudioPage .container {
+    padding: 32px 16px 60px;
+  }
+}

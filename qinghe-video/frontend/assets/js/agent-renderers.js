@@ -71,7 +71,7 @@ window.Qinghe = window.Qinghe || {};
 
   // 包裹外层容器
   function wrap(stepKey, innerHtml) {
-    return '<div class="agent-output" data-step="' + escapeHtml(stepKey) + '">' + innerHtml + '</div>';
+    return '<div class="agent-output agent-output--' + escapeHtml(stepKey) + '" data-step="' + escapeHtml(stepKey) + '">' + innerHtml + '</div>';
   }
 
   // ============ Planner 策划 ============

@@ -11,167 +11,391 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
-  <link rel="stylesheet" href="assets/css/style.css" />
+  <link rel="stylesheet" href="assets/css/style.css?v=5" />
+  <link rel="stylesheet" href="assets/css/auth.css?v=4" />
+  <link rel="stylesheet" href="assets/css/workshop.css?v=4" />
+  <link rel="stylesheet" href="assets/css/image-studio.css?v=1" />
+  <link rel="stylesheet" href="assets/css/agents.css?v=1" />
+  <link rel="stylesheet" href="assets/css/chat.css?v=1" />
+  <link rel="stylesheet" href="assets/css/plan.css?v=1" />
 </head>
 <body>
+
+  <!-- ============================================================
+       鉴权遮罩：登录 / 注册
+       ============================================================ -->
+  <div class="auth-overlay" id="authOverlay" hidden>
+    <div class="auth-card">
+      <div class="auth-card__brand">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+          <path d="M16 4C16 4 8 8 8 16C8 20 11 24 16 24C21 24 24 20 24 16C24 8 16 4 16 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          <path d="M16 24V28M12 14L16 18L20 14M12 18L16 22L20 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </div>
+      <h2 class="auth-card__title">青禾映画 · 管理登录</h2>
+
+      <!-- 登录表单 -->
+      <form class="auth-form" id="loginForm">
+        <div class="auth-field">
+          <label for="loginUsername">用户名</label>
+          <input type="text" id="loginUsername" placeholder="请输入用户名" autocomplete="username" />
+        </div>
+        <div class="auth-field">
+          <label for="loginPassword">密码</label>
+          <input type="password" id="loginPassword" placeholder="请输入密码" autocomplete="current-password" />
+        </div>
+        <p class="auth-error" id="loginError"></p>
+        <button type="submit" class="auth-btn auth-btn--primary" id="loginBtn">登录</button>
+      </form>
+
+      <!-- 注册表单 -->
+      <form class="auth-form" id="registerForm" hidden>
+        <div class="auth-field">
+          <label for="registerUsername">用户名</label>
+          <input type="text" id="registerUsername" placeholder="至少 3 个字符" autocomplete="username" />
+        </div>
+        <div class="auth-field">
+          <label for="registerPassword">密码</label>
+          <input type="password" id="registerPassword" placeholder="至少 6 个字符" autocomplete="new-password" />
+        </div>
+        <p class="auth-error" id="registerError"></p>
+        <button type="submit" class="auth-btn auth-btn--primary" id="registerBtn">注册</button>
+      </form>
+
+      <p class="auth-toggle" id="authToggle">还没有账号？<a href="#">立即注册</a></p>
+      <p class="auth-hint">默认管理员账号：<code>admin</code> / <code>admin123</code></p>
+    </div>
+  </div>
+
+  <!-- ============================================================
+       布局：左侧边栏 + 主内容区
+       ============================================================ -->
+  <div class="site-wrapper" id="siteWrapper">
+
+    <aside class="site-sidebar is-collapsed" id="siteSidebar" aria-label="方案边栏">
+      <div class="sidebar__header">
+        <button class="sidebar__toggle" id="sidebarToggle" aria-label="展开/收起边栏" title="展开边栏">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 6H20M4 12H20M4 18H20" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="sidebar__new">
+        <button class="sidebar__fab" id="sidebarNewPlan" title="新建方案">
+          <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <span class="sidebar__label">新建方案</span>
+      </div>
+
+      <div class="sidebar__progress" id="sidebarProgress" hidden>
+        <div class="pipeline-flow" id="pipelineFlow"></div>
+        <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="status-line" id="statusLine"><span id="statusText">就绪</span></div>
+      </div>
+
+      <nav class="sidebar__plans" id="sidebarPlans" aria-label="我的方案">
+        <h3 class="sidebar__section-title">我的方案</h3>
+        <div class="sidebar__list" id="sidebarPlanList"></div>
+        <a href="#/plan" class="sidebar__all">查看全部 →</a>
+      </nav>
+    </aside>
+
+    <div class="site-body" id="siteBody">
 
   <!-- ============================================================
        模块 1：顶部导航栏
        ============================================================ -->
   <header class="site-header">
     <div class="container site-header__inner">
-      <a href="#" class="brand">
+      <button type="button" class="brand-trigger" id="brandTrigger" aria-label="展开/收起边栏">
         <svg class="brand__mark" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
           <path d="M16 4C16 4 8 8 8 16C8 20 11 24 16 24C21 24 24 20 24 16C24 8 16 4 16 4Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
           <path d="M16 24V28M12 14L16 18L20 14M12 18L16 22L20 18" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span>青禾映画</span>
-      </a>
-      <nav class="nav">
-        <a href="#create" class="nav__link">创作</a>
-        <a href="#workshop" class="nav__link">分步工坊</a>
-        <a href="#pipeline" class="nav__link">流水线</a>
-        <a href="#result" class="nav__link">方案</a>
-        <a href="#about" class="nav__link">关于</a>
+      </button>
+      <nav class="site-nav">
+        <a href="#/create" class="site-nav__link is-active" data-route="create">开始创作</a>
+        <a href="#/chat" class="site-nav__link" data-route="chat">对话创作</a>
+        <a href="#/workshop" class="site-nav__link" data-route="workshop">分步工坊</a>
+        <a href="#/image-studio" class="site-nav__link" data-route="image-studio">图像工作室</a>
+        <a href="#/agents" class="site-nav__link" data-route="agents">Agent 管理</a>
       </nav>
       <span class="health-pill" id="healthPill" title="后端服务状态">
         <span class="health-pill__dot"></span>
         <span id="healthText">检测中</span>
       </span>
+      <button class="nav__logout" id="navLogout" hidden>登出</button>
     </div>
   </header>
 
   <main>
 
     <!-- ============================================================
-         模块 2：Hero 区
+         路由页面区块（新会话式工作室）
          ============================================================ -->
-    <section class="hero">
-      <div class="container hero__grid">
-        <div class="hero__copy">
-          <span class="eyebrow">
-            <span class="num">01</span>
-            LangGraph 多 Agent 协同
-          </span>
-          <h1 class="hero__title">
-            让每一份农产品，<br />
-            都有专属的<em>影像故事</em>。
-          </h1>
-          <p class="hero__sub">
-            青禾映画面向农户与农业合作社。输入农产品基本信息，五个 AI Agent 流水线协作，自动生成一套完整的短视频创作方案——从策划到投放，一站完成。
-          </p>
-          <div class="hero__meta">
-            <span class="tag"><span class="tag__dot"></span>策划 · 文案 · 脚本</span>
-            <span class="tag"><span class="tag__dot"></span>视觉 · 投放 · 报告</span>
-            <span class="tag"><span class="tag__dot"></span>SSE 实时流式</span>
+    <!-- ============================================================
+         对话创作页（ChatGPT 风格）
+         ============================================================ -->
+    <section class="page-section" id="chatPage">
+      <div class="chat-page is-empty">
+        <div class="chat-page-label">对话创作</div>
+        <div class="chat-center-stage">
+          <div class="chat-messages" id="chatMessages"></div>
+
+          <div class="chat-input-area">
+            <div class="chat-input-box">
+              <textarea id="chatInput" rows="1" placeholder="描述你想创作的农产品短视频，例如：为阳山水蜜桃生成 30 秒抖音视频…"></textarea>
+              <button type="button" id="chatSendBtn" aria-label="发送">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M2 8L14 8M14 8L9 3M14 8L9 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+              </button>
+            </div>
+            <p class="chat-input__hint">按 Enter 发送，Shift + Enter 换行</p>
           </div>
-        </div>
-        <div class="hero__art" aria-hidden="true">
-          <!-- 麦穗线条插画 -->
-          <svg viewBox="0 0 200 240" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <!-- 主茎 -->
-            <path d="M100 240V40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-            <!-- 麦穗颗粒（左右对称） -->
-            <g stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
-              <path d="M100 60C92 56 84 58 80 64C84 70 92 68 100 64"/>
-              <path d="M100 60C108 56 116 58 120 64C116 70 108 68 100 64"/>
-              <path d="M100 80C92 76 84 78 80 84C84 90 92 88 100 84"/>
-              <path d="M100 80C108 76 116 78 120 84C116 90 108 88 100 84"/>
-              <path d="M100 100C92 96 84 98 80 104C84 110 92 108 100 104"/>
-              <path d="M100 100C108 96 116 98 120 104C116 110 108 108 100 104"/>
-              <path d="M100 120C92 116 84 118 80 124C84 130 92 128 100 124"/>
-              <path d="M100 120C108 116 116 118 120 124C116 130 108 128 100 124"/>
-              <path d="M100 140C92 136 84 138 80 144C84 150 92 148 100 144"/>
-              <path d="M100 140C108 136 116 138 120 144C116 150 108 148 100 144"/>
-            </g>
-            <!-- 顶部尖芒 -->
-            <path d="M100 40L96 28M100 40L104 28M100 40L100 24" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
-            <!-- 叶片 -->
-            <path d="M100 180C88 172 76 174 70 184C76 194 88 192 100 184" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
-            <path d="M100 180C112 172 124 174 130 184C124 194 112 192 100 184" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
-          </svg>
+
+          <div class="chat-showcase" id="chatShowcase"></div>
         </div>
       </div>
     </section>
 
-
+    <section class="page-section" id="planPage">
+      <div class="plan-page">
+        <div class="container">
+          <div class="plan-page__head reveal">
+            <div class="plan-page__title">
+              <h2>规划设计</h2>
+              <p>管理你的短视频创作方案，随时继续对话或开启新的创作。</p>
+            </div>
+            <div class="plan-page__new">
+              <button class="btn btn--primary" id="planNewBtn">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M8 3V13M3 8H13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                </svg>
+                新建方案
+              </button>
+            </div>
+          </div>
+          <div id="planList"></div>
+        </div>
+      </div>
+    </section>
     <!-- ============================================================
-         模块 3：输入表单
+         路由页面：Agent 管理
          ============================================================ -->
-    <section class="module" id="create">
+    <section class="page-section agents-page" id="agentsPage">
       <div class="container">
         <div class="module__head reveal">
-          <span class="eyebrow"><span class="num">02</span>农产品信息录入</span>
-          <h2 class="section-title">填写产品信息，开启创作</h2>
-          <p class="section-desc">带 <span style="color:var(--color-warn);font-weight:700">*</span> 为必填项。信息越完整，生成的方案越贴合实际。</p>
+          <span class="eyebrow"><span class="num">06</span>Agent 管理</span>
+          <h2 class="section-title">独立调试每个 Agent</h2>
+          <p class="section-desc">选择任意 Agent，填入农产品信息，单独运行并查看结构化输出。</p>
         </div>
 
-        <form class="card form-card reveal" id="createForm" autocomplete="off">
-          <div class="form-grid">
-            <!-- 左列：产品信息 -->
-            <div class="field">
-              <label class="field__label" for="product_name">产品名称 <span class="req">*</span></label>
-              <input class="input" id="product_name" name="product_name" value="阳山水蜜桃" placeholder="如：阳山水蜜桃" required />
+        <div class="agents-workbench reveal">
+          <div class="agents-grid" id="agentsGrid"></div>
+
+          <aside class="agent-detail is-hidden" id="agentDetail" aria-label="Agent 详情面板">
+            <div class="agent-detail__head">
+              <div class="agent-detail__meta">
+                <span class="agent-detail__avatar" id="detailAvatar">📋</span>
+                <div>
+                  <h3 id="detailTitle">选择 Agent</h3>
+                  <p id="detailKicker">SELECT AN AGENT</p>
+                </div>
+              </div>
+              <span class="agent-card__status" id="detailStatus" data-status="idle">空闲</span>
             </div>
 
-            <div class="field">
-              <label class="field__label" for="origin">产地 <span class="req">*</span></label>
-              <input class="input" id="origin" name="origin" value="江苏无锡" placeholder="如：江苏无锡" required />
+            <p class="agent-detail__desc" id="detailDesc">点击左侧卡片选择 Agent，即可在右侧查看详情并运行。</p>
+
+            <form class="agent-form" id="agentForm" autocomplete="off">
+              <div class="field">
+                <label for="agent_product_name">产品名称 <span class="req">*</span></label>
+                <input class="input" id="agent_product_name" name="agent_product_name" placeholder="如：阳山水蜜桃" required />
+              </div>
+              <div class="field">
+                <label for="agent_origin">产地 <span class="req">*</span></label>
+                <input class="input" id="agent_origin" name="agent_origin" placeholder="如：江苏无锡" required />
+              </div>
+              <div class="field">
+                <label for="agent_category">品类 <span class="req">*</span></label>
+                <input class="input" id="agent_category" name="agent_category" placeholder="如：水果 / 蔬菜 / 茶叶" required />
+              </div>
+              <div class="field">
+                <label for="agent_target_platform">目标平台</label>
+                <select class="select" id="agent_target_platform" name="agent_target_platform">
+                  <option value="抖音" selected>抖音</option>
+                  <option value="快手">快手</option>
+                  <option value="视频号">视频号</option>
+                  <option value="B站">B站</option>
+                </select>
+              </div>
+              <div class="field field--full">
+                <label for="agent_selling_points">卖点 <span class="req">*</span></label>
+                <textarea class="textarea" id="agent_selling_points" name="agent_selling_points" placeholder="用一句话描述核心卖点" required></textarea>
+              </div>
+              <div class="field">
+                <label for="agent_target_duration">目标时长</label>
+                <select class="select" id="agent_target_duration" name="agent_target_duration">
+                  <option value="15-30秒">15-30秒</option>
+                  <option value="30-60秒" selected>30-60秒</option>
+                  <option value="60-90秒">60-90秒</option>
+                  <option value="90秒以上">90秒以上</option>
+                </select>
+              </div>
+              <div class="field field--full">
+                <label for="agent_additional_info">补充信息（可选）</label>
+                <textarea class="textarea" id="agent_additional_info" name="agent_additional_info" placeholder="如：预算有限、希望突出产地溯源、有现成采摘素材等"></textarea>
+              </div>
+            </form>
+
+            <div class="agent-detail__actions">
+              <button type="button" class="btn btn--primary" id="runAgentBtn">运行 Agent</button>
+              <a href="#/workshop" class="btn btn--ghost" id="openInWorkshop">在分步工坊中打开</a>
             </div>
 
-            <div class="field">
-              <label class="field__label" for="category">品类 <span class="req">*</span></label>
-              <input class="input" id="category" name="category" value="水果" placeholder="如：水果 / 蔬菜 / 茶叶" required />
-            </div>
-
-            <div class="field">
-              <label class="field__label" for="target_platform">目标平台</label>
-              <select class="select" id="target_platform" name="target_platform">
-                <option value="抖音" selected>抖音</option>
-                <option value="快手">快手</option>
-                <option value="视频号">视频号</option>
-                <option value="B站">B站</option>
-              </select>
-            </div>
-
-            <div class="field field--full">
-              <label class="field__label" for="selling_points">卖点 <span class="req">*</span></label>
-              <textarea class="textarea" id="selling_points" name="selling_points" placeholder="用一句话描述核心卖点" required>汁多味甜、地理标志产品、百年种植历史</textarea>
-            </div>
-
-            <div class="field">
-              <label class="field__label" for="target_duration">目标时长</label>
-              <select class="select" id="target_duration" name="target_duration">
-                <option value="15-30秒">15-30秒</option>
-                <option value="30-60秒" selected>30-60秒</option>
-                <option value="60-90秒">60-90秒</option>
-                <option value="90秒以上">90秒以上</option>
-              </select>
-            </div>
-
-            <div class="field field--full">
-              <label class="field__label" for="additional_info">补充信息（可选）</label>
-              <textarea class="textarea" id="additional_info" name="additional_info" placeholder="如：预算有限、希望突出产地溯源、有现成采摘素材等"></textarea>
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button type="submit" class="btn btn--primary" id="generateBtn">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M2 8L14 8M14 8L9 3M14 8L9 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
-              </svg>
-              <span id="btnText">一键生成创作方案</span>
-            </button>
-          </div>
-        </form>
+            <div class="agent-output-host" id="agentOutput"></div>
+          </aside>
+        </div>
       </div>
+    </section>
+
+    <!-- ============================================================
+         页面：开始创作（Hero + 录入表单）
+         ============================================================ -->
+    <section class="page-section" id="createPage">
+
+      <!-- 模块 2：Hero 区 -->
+      <section class="hero">
+        <div class="container hero__grid">
+          <div class="hero__copy">
+            <span class="eyebrow">
+              <span class="num">01</span>
+              LangGraph 多 Agent 协同
+            </span>
+            <h1 class="hero__title">
+              让每一份农产品，<br />
+              都有专属的<em>影像故事</em>。
+            </h1>
+            <p class="hero__sub">
+              青禾映画面向农户与农业合作社。输入农产品基本信息，五个 AI Agent 流水线协作，自动生成一套完整的短视频创作方案——从策划到投放，一站完成。
+            </p>
+            <div class="hero__meta">
+              <span class="tag"><span class="tag__dot"></span>策划 · 文案 · 脚本</span>
+              <span class="tag"><span class="tag__dot"></span>视觉 · 投放 · 报告</span>
+              <span class="tag"><span class="tag__dot"></span>SSE 实时流式</span>
+            </div>
+          </div>
+          <div class="hero__art" aria-hidden="true">
+            <!-- 麦穗线条插画 -->
+            <svg viewBox="0 0 200 240" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- 主茎 -->
+              <path d="M100 240V40" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+              <!-- 麦穗颗粒（左右对称） -->
+              <g stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" fill="none">
+                <path d="M100 60C92 56 84 58 80 64C84 70 92 68 100 64"/>
+                <path d="M100 60C108 56 116 58 120 64C116 70 108 68 100 64"/>
+                <path d="M100 80C92 76 84 78 80 84C84 90 92 88 100 84"/>
+                <path d="M100 80C108 76 116 78 120 84C116 90 108 88 100 84"/>
+                <path d="M100 100C92 96 84 98 80 104C84 110 92 108 100 104"/>
+                <path d="M100 100C108 96 116 98 120 104C116 110 108 108 100 104"/>
+                <path d="M100 120C92 116 84 118 80 124C84 130 92 128 100 124"/>
+                <path d="M100 120C108 116 116 118 120 124C116 130 108 128 100 124"/>
+                <path d="M100 140C92 136 84 138 80 144C84 150 92 148 100 144"/>
+                <path d="M100 140C108 136 116 138 120 144C116 150 108 148 100 144"/>
+              </g>
+              <!-- 顶部尖芒 -->
+              <path d="M100 40L96 28M100 40L104 28M100 40L100 24" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+              <!-- 叶片 -->
+              <path d="M100 180C88 172 76 174 70 184C76 194 88 192 100 184" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
+              <path d="M100 180C112 172 124 174 130 184C124 194 112 192 100 184" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linejoin="round"/>
+            </svg>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- 模块 3：输入表单 -->
+      <section class="module" id="create">
+        <div class="container">
+          <div class="module__head reveal">
+            <span class="eyebrow"><span class="num">02</span>农产品信息录入</span>
+            <h2 class="section-title">填写产品信息，开启创作</h2>
+            <p class="section-desc">带 <span style="color:var(--color-warn);font-weight:700">*</span> 为必填项。信息越完整，生成的方案越贴合实际。</p>
+          </div>
+
+          <form class="card form-card reveal" id="createForm" autocomplete="off">
+            <div class="form-grid">
+              <!-- 左列：产品信息 -->
+              <div class="field">
+                <label class="field__label" for="product_name">产品名称 <span class="req">*</span></label>
+                <input class="input" id="product_name" name="product_name" value="阳山水蜜桃" placeholder="如：阳山水蜜桃" required />
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="origin">产地 <span class="req">*</span></label>
+                <input class="input" id="origin" name="origin" value="江苏无锡" placeholder="如：江苏无锡" required />
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="category">品类 <span class="req">*</span></label>
+                <input class="input" id="category" name="category" value="水果" placeholder="如：水果 / 蔬菜 / 茶叶" required />
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="target_platform">目标平台</label>
+                <select class="select" id="target_platform" name="target_platform">
+                  <option value="抖音" selected>抖音</option>
+                  <option value="快手">快手</option>
+                  <option value="视频号">视频号</option>
+                  <option value="B站">B站</option>
+                </select>
+              </div>
+
+              <div class="field field--full">
+                <label class="field__label" for="selling_points">卖点 <span class="req">*</span></label>
+                <textarea class="textarea" id="selling_points" name="selling_points" placeholder="用一句话描述核心卖点" required>汁多味甜、地理标志产品、百年种植历史</textarea>
+              </div>
+
+              <div class="field">
+                <label class="field__label" for="target_duration">目标时长</label>
+                <select class="select" id="target_duration" name="target_duration">
+                  <option value="15-30秒">15-30秒</option>
+                  <option value="30-60秒" selected>30-60秒</option>
+                  <option value="60-90秒">60-90秒</option>
+                  <option value="90秒以上">90秒以上</option>
+                </select>
+              </div>
+
+              <div class="field field--full">
+                <label class="field__label" for="additional_info">补充信息（可选）</label>
+                <textarea class="textarea" id="additional_info" name="additional_info" placeholder="如：预算有限、希望突出产地溯源、有现成采摘素材等"></textarea>
+              </div>
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="btn btn--primary" id="generateBtn">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M2 8L14 8M14 8L9 3M14 8L9 13" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <span id="btnText">一键生成创作方案</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
+
     </section>
 
 
     <!-- ============================================================
          模块 4：分步 Agent 工坊
          ============================================================ -->
-    <section class="module" id="workshop">
+    <section class="module page-section" id="workshop">
       <div class="container">
         <div class="module__head reveal">
           <span class="eyebrow"><span class="num">03</span>分步 Agent 工坊</span>
@@ -182,35 +406,71 @@
         <div class="step-workbench reveal">
           <aside class="step-rail" id="stepRail">
             <button class="step-card is-active" data-step="planner">
-              <span class="step-card__num">01</span><strong>策划</strong><small>主题、受众、卖点</small>
+              <span class="step-card__avatar step-card__avatar--planner">📋</span>
+              <span class="step-card__body">
+                <strong>策划</strong>
+                <small>PLANNER</small>
+                <em>主题、受众、卖点</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
             <button class="step-card" data-step="copywriter">
-              <span class="step-card__num">02</span><strong>文案</strong><small>Hook、口播、CTA</small>
+              <span class="step-card__avatar step-card__avatar--copywriter">✍️</span>
+              <span class="step-card__body">
+                <strong>文案</strong>
+                <small>COPYWRITER</small>
+                <em>Hook、口播、CTA</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
             <button class="step-card" data-step="scriptwriter">
-              <span class="step-card__num">03</span><strong>脚本</strong><small>分镜、运镜、BGM</small>
+              <span class="step-card__avatar step-card__avatar--scriptwriter">🎬</span>
+              <span class="step-card__body">
+                <strong>脚本</strong>
+                <small>SCRIPTWRITER</small>
+                <em>分镜、运镜、BGM</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
             <button class="step-card" data-step="visual_designer">
-              <span class="step-card__num">04</span><strong>视觉</strong><small>图片 / 视频 Prompt</small>
+              <span class="step-card__avatar step-card__avatar--visual">🎨</span>
+              <span class="step-card__body">
+                <strong>视觉</strong>
+                <small>VISUAL DESIGNER</small>
+                <em>图片 / 视频 Prompt</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
             <button class="step-card" data-step="distributor">
-              <span class="step-card__num">05</span><strong>投放</strong><small>标题、标签、策略</small>
+              <span class="step-card__avatar step-card__avatar--distributor">📣</span>
+              <span class="step-card__body">
+                <strong>投放</strong>
+                <small>DISTRIBUTOR</small>
+                <em>标题、标签、策略</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
             <button class="step-card" data-step="report_generator">
-              <span class="step-card__num">06</span><strong>报告</strong><small>汇总成完整方案</small>
+              <span class="step-card__avatar step-card__avatar--report">📄</span>
+              <span class="step-card__body">
+                <strong>报告</strong>
+                <small>REPORT</small>
+                <em>汇总成完整方案</em>
+              </span>
+              <span class="step-card__check">✓</span>
             </button>
           </aside>
 
           <div class="step-stage">
             <div class="step-stage__head">
               <div>
-                <span class="eyebrow"><span class="num" id="activeStepNum">01</span><span id="activeStepKicker">Agent Step</span></span>
+                <span class="eyebrow"><span class="num" id="activeStepNum">01</span><span id="activeStepKicker">PLANNER</span></span>
                 <h3 id="activeStepTitle">策划 Agent</h3>
                 <p id="activeStepDesc">先确定主题方向、核心卖点与目标受众。</p>
               </div>
               <button class="btn btn--primary" id="runStepBtn">执行当前步骤</button>
             </div>
-            <div class="step-output agent-output-host" id="stepOutput">等待执行 · 当前步骤产物会显示在这里</div>
+            <div class="step-output agent-output-host" id="stepOutput"></div>
           </div>
         </div>
 
@@ -237,42 +497,61 @@
 
 
     <!-- ============================================================
-         模块 5：流水线进度
+         模块：图像处理工作室（九宫格导演板）
          ============================================================ -->
-    <section class="module" id="pipeline">
+    <section class="module page-section" id="imageStudioPage">
       <div class="container">
         <div class="module__head reveal">
-          <span class="eyebrow"><span class="num">04</span>流水线执行进度</span>
-          <h2 class="section-title">五个 Agent，协同作业</h2>
-          <p class="section-desc">从策划到投放，实时呈现每个节点的执行状态。</p>
+          <span class="eyebrow"><span class="num">★</span>图像处理工作室</span>
+          <h2 class="section-title">九宫格导演板 · 人物物品一致性生成</h2>
+          <p class="section-desc">上传物品或人物参考图，沿 9 个维度生成风格变体，拼成 3×3 导演板，用于广告视频创作参考。</p>
         </div>
 
-        <div class="card pipeline-card reveal">
-          <!-- 节点流程图 -->
-          <div class="pipeline-flow" id="pipelineFlow">
-            <!-- 节点由 pipeline.js 动态渲染 -->
+        <form class="studio-form reveal" id="studioForm">
+          <div class="studio-form__row">
+            <div class="studio-field">
+              <label for="studioImageType">参考图类型</label>
+              <select id="studioImageType" name="image_type" required>
+                <option value="product">物品图（product）</option>
+                <option value="person">人物图（person）</option>
+              </select>
+            </div>
+            <div class="studio-field studio-field--grow">
+              <label for="studioSubject">创作主题</label>
+              <input type="text" id="studioSubject" name="subject" placeholder="如：便携咖啡杯广告 / 春季新品展示" required maxlength="200" />
+            </div>
           </div>
+          <div class="studio-form__row">
+            <div class="studio-field studio-field--grow">
+              <label for="studioStyle">风格偏好（可选）</label>
+              <input type="text" id="studioStyle" name="style_preference" placeholder="如：简约现代 / 复古胶片 / 高级感" maxlength="100" />
+            </div>
+          </div>
+          <div class="studio-form__row">
+            <div class="studio-field studio-field--grow">
+              <label for="studioImage">上传参考图（jpeg/png/webp）</label>
+              <div class="studio-upload" id="studioUpload">
+                <input type="file" id="studioImage" name="reference_image" accept="image/jpeg,image/png,image/webp" required />
+                <div class="studio-upload__hint" id="studioUploadHint">点击或拖拽图片到此处</div>
+              </div>
+            </div>
+          </div>
+          <div class="studio-form__actions">
+            <button type="submit" class="btn btn--primary" id="studioSubmit">生成九宫格导演板</button>
+          </div>
+        </form>
 
-          <!-- 进度条 -->
-          <div class="progress-track">
-            <div class="progress-fill" id="progressFill"></div>
-          </div>
+        <div class="studio-status is-hidden" id="studioStatus"></div>
 
-          <!-- 状态行 -->
-          <div class="status-line" id="statusLine">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <circle cx="8" cy="8" r="6" stroke="currentColor" stroke-width="1.4"/>
-              <path d="M8 5V8L10 9.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/>
-            </svg>
-            <span id="statusText">等待启动 · 填写信息后点击生成</span>
-          </div>
-        </div>
+        <div class="studio-grid reveal" id="studioGrid"></div>
+
+        <div class="studio-result is-hidden" id="studioResult"></div>
       </div>
     </section>
 
 
     <!-- ============================================================
-         模块 5：结果展示
+         模块 4：结果展示
          ============================================================ -->
     <section class="module is-hidden" id="result">
       <div class="container">
@@ -362,13 +641,13 @@
         </div>
 
         <div class="footer-col">
-          <h4>流水线</h4>
+          <h4>分步工坊</h4>
           <ul>
-            <li><a href="#pipeline">策划 Agent</a></li>
-            <li><a href="#pipeline">文案 Agent</a></li>
-            <li><a href="#pipeline">脚本 Agent</a></li>
-            <li><a href="#pipeline">视觉 Agent</a></li>
-            <li><a href="#pipeline">投放 Agent</a></li>
+            <li><a href="#/workshop">策划 Agent</a></li>
+            <li><a href="#/workshop">文案 Agent</a></li>
+            <li><a href="#/workshop">脚本 Agent</a></li>
+            <li><a href="#/workshop">视觉 Agent</a></li>
+            <li><a href="#/workshop">投放 Agent</a></li>
           </ul>
         </div>
 
@@ -389,15 +668,24 @@
       </div>
     </div>
   </footer>
+    </div>
+  </div>
 
 
   <!-- 脚本：模块化加载 -->
-  <script src="assets/js/pipeline.js"></script>
-  <script src="assets/js/form.js"></script>
-  <script src="assets/js/result.js"></script>
-  <script src="assets/js/agent-renderers.js"></script>
-  <script src="assets/js/workshop.js"></script>
-  <script src="assets/js/video-compose-ui.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/js/pipeline.js?v=4"></script>
+  <script src="assets/js/form.js?v=4"></script>
+  <script src="assets/js/result.js?v=4"></script>
+  <script src="assets/js/agent-renderers.js?v=4"></script>
+  <script src="assets/js/workshop.js?v=4"></script>
+  <script src="assets/js/image-studio.js?v=1"></script>
+  <script src="assets/js/video-compose-ui.js?v=4"></script>
+  <script src="assets/js/auth.js?v=4"></script>
+  <script src="assets/js/router.js?v=6"></script>
+  <script src="assets/js/chat.js?v=1"></script>
+  <script src="assets/js/plan.js?v=1"></script>
+  <script src="assets/js/agents.js?v=1"></script>
+  <script src="assets/js/sidebar.js?v=1"></script>
+  <script src="assets/js/app.js?v=4"></script>
 </body>
 </html>

@@ -170,26 +170,35 @@ function ScriptwriterView({ output }: { output: ScriptwriterOutput }) {
 }
 
 function VisualView({ output }: { output: VisualOutput }) {
+  // 后端 models.py 中 color_palette / quality_tags 为 str（逗号分隔），
+  // 这里兼容字符串与数组两种形态。
+  const palette = toArray(output.visual_style.color_palette);
+  const qualityTags = toArray(output.visual_style.quality_tags);
+
   return (
     <div className="space-y-2">
       <Field label="视觉风格">
         <div className="text-xs">
           <div>风格：{output.visual_style.style}</div>
           <div>比例：{output.visual_style.aspect_ratio}</div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {output.visual_style.color_palette.map((c, i) => (
-              <Badge key={i} variant="outline" className="font-mono text-[10px]">
-                {c}
-              </Badge>
-            ))}
-          </div>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {output.visual_style.quality_tags.map((t, i) => (
-              <Badge key={i} variant="secondary" className="text-[10px]">
-                {t}
-              </Badge>
-            ))}
-          </div>
+          {palette.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {palette.map((c, i) => (
+                <Badge key={i} variant="outline" className="font-mono text-[10px]">
+                  {c}
+                </Badge>
+              ))}
+            </div>
+          )}
+          {qualityTags.length > 0 && (
+            <div className="mt-1 flex flex-wrap gap-1">
+              {qualityTags.map((t, i) => (
+                <Badge key={i} variant="secondary" className="text-[10px]">
+                  {t}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
       </Field>
       <Field label="分镜图片 Prompt">
@@ -301,6 +310,21 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <div className="text-sm text-ink">{children}</div>
     </div>
   );
+}
+
+/**
+ * 将「可能是逗号分隔字符串或数组」的值规范化为字符串数组。
+ * 后端 visual_style.color_palette / quality_tags 是 str，前端需要数组来 .map。
+ */
+function toArray(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map((v) => String(v));
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(/[,，、]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return [];
 }
 
 /** 极简 Markdown 渲染（仅支持 # 标题、**粗体**、- 列表、空行段落）。 */

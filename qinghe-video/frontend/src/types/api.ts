@@ -137,9 +137,11 @@ export interface ScriptwriterOutput {
 
 export interface VisualStyle {
   style: string;
-  color_palette: string[];
+  /** 后端为逗号分隔字符串，前端用 toArray() 兼容 */
+  color_palette: string[] | string;
   aspect_ratio: string;
-  quality_tags: string[];
+  /** 后端为逗号分隔字符串，前端用 toArray() 兼容 */
+  quality_tags: string[] | string;
 }
 
 export interface ShotPrompt {

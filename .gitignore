@@ -40,3 +40,6 @@ logs/
 # 操作系统
 .DS_Store
 Thumbs.db
+qinghe-video.db
+
+AGENTS.md/

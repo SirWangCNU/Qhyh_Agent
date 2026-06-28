@@ -1,0 +1,149 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   设计令牌（保留原 style.css 同名 CSS 变量）
+   ============================================================ */
+:root {
+  /* 原设计令牌 */
+  --color-bg: #f5f1e8;
+  --color-bg-alt: #fbf8f1;
+  --color-surface: #ffffff;
+  --color-ink: #1f1f1f;
+  --color-ink-soft: #6b6357;
+  --color-ink-faint: #a39c8e;
+  --color-brand: #3d5a3d;
+  --color-brand-deep: #2d4a2b;
+  --color-accent: #c9a961;
+  --color-accent-soft: #e8d9b0;
+  --color-warn: #b85c38;
+  --color-success: #7b9e5b;
+  --color-border: #e8e2d5;
+  --color-border-strong: #d4ccb8;
+
+  /* shadcn/ui HSL 变量（映射到上述色） */
+  --background: 42 36% 94%;
+  --foreground: 0 0% 12%;
+  --card: 40 47% 98%;
+  --card-foreground: 0 0% 12%;
+  --popover: 40 47% 98%;
+  --popover-foreground: 0 0% 12%;
+  --primary: 120 22% 30%;
+  --primary-foreground: 40 47% 98%;
+  --secondary: 40 33% 90%;
+  --secondary-foreground: 0 0% 12%;
+  --muted: 40 33% 90%;
+  --muted-foreground: 40 12% 50%;
+  --accent: 36 47% 59%;
+  --accent-foreground: 0 0% 12%;
+  --destructive: 17 49% 48%;
+  --destructive-foreground: 40 47% 98%;
+  --border: 42 28% 89%;
+  --input: 42 28% 89%;
+  --ring: 120 22% 30%;
+  --radius: 0.5rem;
+}
+
+/* ============================================================
+   全局重置 / 基础
+   ============================================================ */
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    @apply bg-background text-foreground font-body antialiased;
+    margin: 0;
+    line-height: 1.6;
+    font-size: 16px;
+    min-height: 100vh;
+    /* 纸张噪点纹理叠加（移植自旧 style.css） */
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+    background-size: 200px 200px;
+    background-blend-mode: multiply;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+    opacity: 0.035;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n2)'/%3E%3C/svg%3E");
+  }
+
+  /* 排版辅助：editorial eyebrow */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary;
+  }
+  .eyebrow .num {
+    @apply inline-flex h-5 w-5 items-center justify-center rounded-full border border-primary text-[0.65rem] text-primary;
+  }
+
+  .section-title {
+    font-family: var(--font-display, theme('fontFamily.display'));
+    @apply mt-3 text-ink;
+    font-weight: 500;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    letter-spacing: -0.015em;
+  }
+
+  .section-desc {
+    @apply mt-2 max-w-prose text-sm text-ink-soft;
+  }
+
+  .container-app {
+    @apply relative z-[2] mx-auto w-full max-w-content px-6;
+  }
+
+  /* 焦点可见性（可访问性） */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+}
+
+/* ============================================================
+   容器辅助类
+   ============================================================ */
+@layer components {
+  .site-body {
+    position: relative;
+    z-index: 2;
+  }
+
+  /* 滚动入场 reveal 状态 */
+  .reveal {
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.is-in {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 自定义滚动条（与暖色主题协调） */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border-strong);
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-ink-faint);
+}

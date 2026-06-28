@@ -216,90 +216,153 @@ window.Qinghe = window.Qinghe || {};
       + '<div class="chat-welcome__chips">' + chips + '</div>'
       + '</div>';
     bindChips();
-    renderShowcase();
+    renderChatShowcase();
   }
 
-  function renderShowcase() {
-    if (!showcaseEl) return;
-
-    var IMAGE_API = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image";
-    var works = [
-      {
-        title: "安岳柠檬 · 产地溯源",
-        desc: "30 秒抖音短视频，突出黄金产区与手工采摘。",
-        platform: "抖音",
-        duration: "30s",
-        prompt: "cinematic close-up of fresh yellow lemons on a wooden basket in a sunlit citrus orchard, warm morning light, shallow depth of field, realistic photography, no text"
-      },
-      {
-        title: "五常大米 · 品牌故事",
-        desc: "60 秒快手口播脚本，讲述黑土种植到餐桌的旅程。",
-        platform: "快手",
-        duration: "60s",
-        prompt: "aerial view of golden rice paddies in Northeast China, a farmer walking through the field with a straw hat, soft sunset light, cinematic realistic photography, no text"
-      },
-      {
-        title: "西湖龙井 · 春茶上市",
-        desc: "产地溯源短视频，展现清明前采茶与炒制工艺。",
-        platform: "视频号",
-        duration: "45s",
-        prompt: "close-up of fresh green tea leaves being picked by hand in a misty Longjing tea garden, spring morning dew, realistic photography, no text"
-      },
-      {
-        title: "赣南脐橙 · 果园直发",
-        desc: "带货投放方案，强调现摘现发与甜度保证。",
-        platform: "抖音",
-        duration: "30s",
-        prompt: "ripe orange fruits hanging on trees in an orchard, farmer carrying a basket, golden hour sunlight, realistic photography, no text"
-      }
-    ];
-
-    function imgUrl(prompt) {
-      return IMAGE_API + "?prompt=" + encodeURIComponent(prompt) + "&image_size=landscape_16_9";
+  var IMAGE_API = "https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image";
+  var SHOWCASE_WORKS = [
+    {
+      title: "安岳柠檬 · 产地溯源",
+      desc: "30 秒抖音短视频，突出黄金产区与手工采摘。",
+      platform: "抖音",
+      duration: "30s",
+      prompt: "cinematic close-up of fresh yellow lemons on a wooden basket in a sunlit citrus orchard, warm morning light, shallow depth of field, realistic photography, no text"
+    },
+    {
+      title: "五常大米 · 品牌故事",
+      desc: "60 秒快手口播脚本，讲述黑土种植到餐桌的旅程。",
+      platform: "快手",
+      duration: "60s",
+      prompt: "aerial view of golden rice paddies in Northeast China, a farmer walking through the field with a straw hat, soft sunset light, cinematic realistic photography, no text"
+    },
+    {
+      title: "西湖龙井 · 春茶上市",
+      desc: "45 秒视频号产地溯源，展现清明前采茶与炒制。",
+      platform: "视频号",
+      duration: "45s",
+      prompt: "close-up of fresh green tea leaves being picked by hand in a misty Longjing tea garden, spring morning dew, realistic photography, no text"
+    },
+    {
+      title: "赣南脐橙 · 果园直发",
+      desc: "30 秒抖音带货脚本，强调现摘现发与甜度保证。",
+      platform: "抖音",
+      duration: "30s",
+      prompt: "ripe orange fruits hanging on trees in an orchard, farmer carrying a basket, golden hour sunlight, realistic photography, no text"
+    },
+    {
+      title: "阳澄湖大闸蟹 · 金秋尝鲜",
+      desc: "45 秒抖音短视频，聚焦蟹肥膏满与生态养殖。",
+      platform: "抖音",
+      duration: "45s",
+      prompt: "fresh hairy crabs on a wooden tray with steam, golden autumn light, shallow depth of field, realistic food photography, no text"
+    },
+    {
+      title: "新疆哈密瓜 · 沙漠绿洲",
+      desc: "30 秒快手产地直发，突出昼夜温差与甘甜多汁。",
+      platform: "快手",
+      duration: "30s",
+      prompt: "sweet melons in a desert oasis farm, farmer cutting a ripe melon, warm sunlight, realistic photography, no text"
+    },
+    {
+      title: "云南普洱 · 古树茶韵",
+      desc: "60 秒视频号品牌故事，呈现古茶树与手工制茶。",
+      platform: "视频号",
+      duration: "60s",
+      prompt: "ancient tea trees in Yunnan misty mountains, hands rolling tea leaves traditionally, cinematic realistic photography, no text"
+    },
+    {
+      title: "东北黑木耳 · 山林珍味",
+      desc: "30 秒抖音带货脚本，强调椴木生长与原生态品质。",
+      platform: "抖音",
+      duration: "30s",
+      prompt: "black wood ear mushrooms growing on logs in a Northeast China forest, soft natural light, realistic photography, no text"
+    },
+    {
+      title: "海南芒果 · 热带阳光",
+      desc: "45 秒快手短视频，展现热带果园与现摘现发。",
+      platform: "快手",
+      duration: "45s",
+      prompt: "ripe mangoes hanging on tropical trees, farmer picking mangoes in a sunny Hainan orchard, realistic photography, no text"
     }
+  ];
 
-    function card(w, idx) {
-      return (
-        '<article class="chat-showcase__card" data-index="' + idx + '">'
-        + '<div class="chat-showcase__media">'
-        + '<img src="' + imgUrl(w.prompt) + '" alt="' + escapeAttr(w.title) + '" loading="lazy" />'
-        + '<div class="chat-showcase__overlay">'
-        + '<div class="chat-showcase__play"><svg viewBox="0 0 16 16" fill="none"><path d="M4 3L13 8L4 13V3Z" fill="currentColor"/></svg></div>'
-        + '<h3 class="chat-showcase__name">' + escapeHtml(w.title) + '</h3>'
-        + '<div class="chat-showcase__meta">'
-        + '<span class="chat-showcase__tag">' + escapeHtml(w.platform) + '</span>'
-        + '<span class="chat-showcase__tag">' + escapeHtml(w.duration) + '</span>'
-        + '</div>'
-        + '</div>'
-        + '</div>'
-        + '<div class="chat-showcase__info">'
-        + '<p class="chat-showcase__desc">' + escapeHtml(w.desc) + '</p>'
-        + '</div>'
-        + '</article>'
-      );
-    }
+  function showcaseImgUrl(prompt) {
+    return IMAGE_API + "?prompt=" + encodeURIComponent(prompt) + "&image_size=landscape_16_9";
+  }
 
-    var html =
-      '<div class="chat-showcase__head">'
-      + '<h3 class="chat-showcase__title">精选作品</h3>'
-      + '<a href="#/plan" class="chat-showcase__more">查看全部 →</a>'
+  function renderShowcaseCard(w, idx) {
+    return (
+      '<article class="chat-showcase__card" data-index="' + idx + '">'
+      + '<div class="chat-showcase__media">'
+      + '<img src="' + showcaseImgUrl(w.prompt) + '" alt="' + escapeAttr(w.title) + '" loading="lazy" />'
+      + '<div class="chat-showcase__overlay">'
+      + '<div class="chat-showcase__play"><svg viewBox="0 0 16 16" fill="none"><path d="M4 3L13 8L4 13V3Z" fill="currentColor"/></svg></div>'
+      + '<h3 class="chat-showcase__name">' + escapeHtml(w.title) + '</h3>'
+      + '<div class="chat-showcase__meta">'
+      + '<span class="chat-showcase__tag">' + escapeHtml(w.platform) + '</span>'
+      + '<span class="chat-showcase__tag">' + escapeHtml(w.duration) + '</span>'
       + '</div>'
-      + '<div class="chat-showcase__grid">'
-      + works.map(function (w, i) { return card(w, i); }).join("")
+      + '</div>'
+      + '</div>'
+      + '<div class="chat-showcase__info">'
+      + '<p class="chat-showcase__desc">' + escapeHtml(w.desc) + '</p>'
+      + '</div>'
+      + '</article>'
+    );
+  }
+
+  function renderShowcase(containerEl, onClick, showHeader) {
+    if (!containerEl) return;
+
+    var html = "";
+    if (showHeader !== false) {
+      html +=
+        '<div class="chat-showcase__head">'
+        + '<h3 class="chat-showcase__title">精选作品</h3>'
+        + '<a href="#/plan" class="chat-showcase__more">查看全部 →</a>'
+        + '</div>';
+    }
+    html +=
+      '<div class="chat-showcase__grid">'
+      + SHOWCASE_WORKS.map(function (w, i) { return renderShowcaseCard(w, i); }).join("")
       + '</div>';
 
-    showcaseEl.innerHTML = html;
+    containerEl.innerHTML = html;
 
-    showcaseEl.querySelectorAll(".chat-showcase__card").forEach(function (c) {
+    containerEl.querySelectorAll(".chat-showcase__card").forEach(function (c) {
       c.addEventListener("click", function () {
         var idx = parseInt(c.getAttribute("data-index"), 10);
-        var w = works[idx];
-        if (inputEl && w) {
+        var w = SHOWCASE_WORKS[idx];
+        if (onClick && w) onClick(w, idx);
+      });
+    });
+  }
+
+  function renderChatShowcase() {
+    renderShowcase(showcaseEl, function (w) {
+      if (inputEl) {
+        inputEl.value = "参考「" + w.title + "」的风格，" + w.desc;
+        if (inputEl.focus) inputEl.focus();
+      }
+    });
+  }
+
+  function renderCreateShowcase() {
+    var el = document.getElementById("createShowcase");
+    if (!el) return;
+    renderShowcase(el, function (w) {
+      if (Q.router && typeof Q.router.navigate === "function") {
+        Q.router.navigate("#/chat");
+      } else {
+        window.location.hash = "#/chat";
+      }
+      setTimeout(function () {
+        if (inputEl) {
           inputEl.value = "参考「" + w.title + "」的风格，" + w.desc;
           if (inputEl.focus) inputEl.focus();
         }
-      });
-    });
+      }, 120);
+    }, false);
   }
 
   function bindChips() {
@@ -554,6 +617,7 @@ window.Qinghe = window.Qinghe || {};
   // ---------- 初始化 ----------
   function init() {
     bindEvents();
+    renderCreateShowcase();
     var planId = getUrlPlanId();
     if (planId && loadPlan(planId)) {
       // 已恢复历史

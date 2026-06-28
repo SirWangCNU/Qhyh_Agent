@@ -72,10 +72,14 @@ app.add_middleware(
 )
 
 # ---------- 静态文件服务 ----------
+# 开发模式：Vite dev server (:5173) 通过 vite.config.ts 的 proxy 转发 /api /outputs 到本服务，
+#           前端不依赖 FastAPI serve。
+# 生产模式：执行 `npm run build` 后产物在 frontend/dist/，FastAPI 直接 serve 该目录。
 _FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
-_FRONTEND_ASSETS = _FRONTEND_DIR / "assets"
+_FRONTEND_DIST = _FRONTEND_DIR / "dist"
+_FRONTEND_ASSETS = _FRONTEND_DIST / "assets"
 
-if _FRONTEND_DIR.exists():
+if _FRONTEND_DIST.exists():
     app.mount("/assets", StaticFiles(directory=str(_FRONTEND_ASSETS)), name="assets")
 
 # ---------- 产物目录（音频 / 视频） ----------
@@ -88,24 +92,39 @@ _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=str(_OUTPUTS_DIR)), name="outputs")
 
 
+def _serve_spa() -> HTMLResponse:
+    """返回 React SPA 入口 index.html（来自 frontend/dist/）。
+
+    开发模式下若未构建，提示用户运行 npm run dev 或 npm run build。
+    """
+    index_file = _FRONTEND_DIST / "index.html"
+    if not index_file.exists():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "前端未构建。请在 qinghe-video/frontend/ 下执行 `npm run build`，"
+                "或使用 `npm run dev` 启动 Vite 开发服务器（端口 5173）。"
+            ),
+        )
+    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+
+
 @app.get("/", summary="前端页面")
 def index():
     """返回前端 index.html。"""
-    index_file = _FRONTEND_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="前端页面未找到")
-    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+    return _serve_spa()
 
 
+# SPA 路由兼容：所有前端路径返回同一 index.html，由 React Router 接管
 @app.get("/chat", summary="对话创作页面")
 @app.get("/plan", summary="规划设计页面")
 @app.get("/agents", summary="Agent 管理页面")
+@app.get("/create", summary="开始创作页面")
+@app.get("/workshop", summary="分步工坊页面")
+@app.get("/image-studio", summary="图像工作室页面")
 def spa_routes():
-    """SPA 路由兼容：/chat、/plan、/agents 均返回同一 index.html。"""
-    index_file = _FRONTEND_DIR / "index.html"
-    if not index_file.exists():
-        raise HTTPException(status_code=404, detail="前端页面未找到")
-    return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+    """SPA 路由兼容：所有前端路径返回同一 index.html。"""
+    return _serve_spa()
 
 
 @app.get("/api/health", summary="健康检查")

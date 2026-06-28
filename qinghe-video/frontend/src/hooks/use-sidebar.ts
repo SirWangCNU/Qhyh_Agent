@@ -12,17 +12,19 @@ import { useUIStore } from "@/stores/ui-store";
  */
 export function useSidebar() {
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
+  const visible = useUIStore((s) => s.sidebarVisible);
   const toggle = useUIStore((s) => s.toggleSidebar);
   const setCollapsed = useUIStore((s) => s.setSidebarCollapsed);
+  const setVisible = useUIStore((s) => s.setSidebarVisible);
 
   // 点击外部关闭
   useEffect(() => {
-    if (collapsed) return;
+    if (!visible) return;
     function onDocClick(e: MouseEvent) {
       const t = e.target as HTMLElement | null;
       if (!t) return;
       if (t.closest("[data-sidebar]") || t.closest("[data-brand-trigger]")) return;
-      setCollapsed(true);
+      setVisible(false);
     }
     // 用 setTimeout 延迟一帧，避免触发 toggle 的同一 click 立即关闭
     const timer = setTimeout(() => {
@@ -32,17 +34,17 @@ export function useSidebar() {
       clearTimeout(timer);
       document.removeEventListener("click", onDocClick);
     };
-  }, [collapsed, setCollapsed]);
+  }, [visible, setVisible]);
 
   // Esc 关闭
   useEffect(() => {
-    if (collapsed) return;
+    if (!visible) return;
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setCollapsed(true);
+      if (e.key === "Escape") setVisible(false);
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [collapsed, setCollapsed]);
+  }, [visible, setVisible]);
 
-  return { collapsed, toggle, setCollapsed };
+  return { collapsed, visible, toggle, setCollapsed, setVisible };
 }

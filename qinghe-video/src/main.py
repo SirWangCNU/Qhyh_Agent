@@ -31,6 +31,7 @@ from src.graph import app_graph
 from src.image_generation import ImageGenerationRequest, generate_image
 from src.image_studio import image_studio_router
 from src.models import UserInput
+from src.text_polish import PolishRequest, polish_user_input
 from src.tts_service import synthesize as tts_synthesize, _synthesize_async
 from src.video_compose import compose as compose_video
 from src.video_generation import VideoGenerationRequest, build_video_preview
@@ -52,7 +53,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="青禾映画 API",
-    description="LangGraph 多 Agent 协同农业短视频创作平台 MVP",
+    description="青禾映画农业短视频创作平台 MVP",
     version="0.1.0",
     lifespan=lifespan,
 )
@@ -145,6 +146,22 @@ def run_agent_step_api(step: AgentStep, payload: AgentStepRequest, _current_user
     if result.get("error"):
         logger.warning("[API] 单步 Agent 返回错误 step=%s: %s", step, result["error"])
     return result
+
+
+@app.post("/api/text/polish", summary="AI 一句话润写为完整输入")
+def polish_text_api(req: PolishRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """把用户的一句话创意扩写为完整 UserInput 字段（产地/品类/卖点等）。
+
+    返回字段：
+    - ``status``: 固定 "success"
+    - ``input``: 补全后的完整 UserInput 字段，可直接用于 /api/agents/{step}
+    """
+    try:
+        result = polish_user_input(req)
+    except Exception as e:
+        logger.exception("[API] 文本润写失败")
+        raise HTTPException(status_code=500, detail=f"润写失败: {e}") from e
+    return {"status": "success", "input": result.model_dump()}
 
 
 @app.post("/api/images/generate", summary="生成图片素材")

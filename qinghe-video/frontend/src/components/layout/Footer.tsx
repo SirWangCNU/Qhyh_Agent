@@ -70,7 +70,6 @@ export function Footer() {
 
         <div className="mt-8 flex flex-col items-start justify-between gap-2 border-t border-border pt-4 text-xs text-ink-faint sm:flex-row sm:items-center">
           <span>青禾映画 MVP · 农业短视频智能创作平台</span>
-          <span>LangGraph 多 Agent 协同</span>
         </div>
       </div>
     </footer>

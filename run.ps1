@@ -1,7 +1,9 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿#Requires -Version 5.1
+#Requires -Version 5.1
 param(
     [int]$BackendPort = 0,
-    [switch]$SkipBackend
+    [int]$FrontendPort = 0,
+    [switch]$SkipBackend,
+    [switch]$SkipFrontend
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -57,7 +59,13 @@ function Stop-ProcessByPort {
 if ($BackendPort -eq 0) {
     $BackendPort = [int](Get-EnvValue -Key "APP_PORT" -DefaultValue "18739")
 }
+if ($FrontendPort -eq 0) {
+    $FrontendPort = 5173
+}
 
+$frontendDir = Join-Path $projectDir "frontend"
+
+# ---------- 找 Python ----------
 $pythonCmd = $null
 foreach ($cmd in @("python", "py", "python3")) {
     if (Get-Command $cmd -ErrorAction SilentlyContinue) {
@@ -65,56 +73,117 @@ foreach ($cmd in @("python", "py", "python3")) {
         break
     }
 }
-if (-not $pythonCmd) {
+if (-not $SkipBackend -and -not $pythonCmd) {
     Write-Error "Python not found in PATH"
     exit 1
 }
-Write-Host "Python: $pythonCmd" -ForegroundColor Gray
+if ($pythonCmd) { Write-Host "Python: $pythonCmd" -ForegroundColor Gray }
 
-Write-Host "`n[1/3] Check deps..." -ForegroundColor Yellow
-$missing = @()
-foreach ($module in @("fastapi", "uvicorn", "langgraph", "langchain_openai", "pydantic", "pydantic_settings", "httpx", "edge_tts", "moviepy", "PIL")) {
-    & $pythonCmd -c "import $module" 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) { $missing += $module }
+# ---------- 找 Node / npm ----------
+$nodeCmd = $null
+if (Get-Command "node" -ErrorAction SilentlyContinue) { $nodeCmd = "node" }
+
+$npmCmd = $null
+if (Get-Command "npm" -ErrorAction SilentlyContinue) {
+    $npmCmd = "npm"
+} elseif ($nodeCmd) {
+    # npm.cmd 通常和 node.exe 在同一目录
+    $nodeDir = Split-Path -Parent (Get-Command $nodeCmd).Source
+    $npmExe = Join-Path $nodeDir "npm.cmd"
+    if (Test-Path $npmExe) { $npmCmd = $npmExe }
 }
-if ($missing.Count -gt 0) {
-    Write-Host "Missing: $($missing -join ', ')" -ForegroundColor Red
-    Write-Host "pip install -e ." -ForegroundColor Yellow
-    & $pythonCmd -m pip install -e .
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "pip install failed"
-        exit 1
+if (-not $SkipFrontend -and -not $npmCmd) {
+    Write-Error "npm not found in PATH. Please install Node.js or use -SkipFrontend"
+    exit 1
+}
+if ($nodeCmd) { Write-Host "Node:   $nodeCmd" -ForegroundColor Gray }
+if ($npmCmd) { Write-Host "npm:    $npmCmd" -ForegroundColor Gray }
+
+# ---------- 检查 Python 依赖 ----------
+if (-not $SkipBackend) {
+    Write-Host "`n[1/4] Check Python deps..." -ForegroundColor Yellow
+    $missing = @()
+    foreach ($module in @("fastapi", "uvicorn", "langgraph", "langchain_openai", "pydantic", "pydantic_settings", "httpx", "edge_tts", "moviepy", "PIL")) {
+        & $pythonCmd -c "import $module" 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) { $missing += $module }
     }
-} else {
-    Write-Host "  OK" -ForegroundColor Green
+    if ($missing.Count -gt 0) {
+        Write-Host "Missing: $($missing -join ', ')" -ForegroundColor Red
+        Write-Host "pip install -e ." -ForegroundColor Yellow
+        & $pythonCmd -m pip install -e .
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "pip install failed"
+            exit 1
+        }
+    } else {
+        Write-Host "  OK" -ForegroundColor Green
+    }
 }
 
-Write-Host "`n[2/3] Clear port $BackendPort..." -ForegroundColor Yellow
+# ---------- 检查前端依赖 ----------
+if (-not $SkipFrontend) {
+    Write-Host "`n[2/4] Check frontend deps..." -ForegroundColor Yellow
+    $nodeModules = Join-Path $frontendDir "node_modules"
+    if (-not (Test-Path $nodeModules)) {
+        Write-Host "  Running npm install..." -ForegroundColor Yellow
+        $installProc = Start-Process -FilePath $npmCmd -ArgumentList "install" `
+            -WorkingDirectory $frontendDir -WindowStyle Normal -PassThru -Wait
+        if ($installProc.ExitCode -ne 0) {
+            Write-Error "npm install failed"
+            exit 1
+        }
+    } else {
+        Write-Host "  OK" -ForegroundColor Green
+    }
+}
+
+# ---------- 清端口 ----------
+Write-Host "`n[3/4] Clear ports..." -ForegroundColor Yellow
 if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
+if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
 Start-Sleep -Seconds 1
 
+# ---------- 启动后端 ----------
 $backendProc = $null
 if (-not $SkipBackend) {
-    Write-Host "`n[3/3] Start FastAPI on port $BackendPort ..." -ForegroundColor Yellow
-    $backendProc = Start-Process -FilePath $pythonCmd `
-        -ArgumentList "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload" `
-        -WorkingDirectory $projectDir -WindowStyle Normal -PassThru
+    Write-Host "`n[4/4] Start FastAPI on port $BackendPort ..." -ForegroundColor Yellow
+    $backendProc = Start-Process -FilePath $pythonCmd -ArgumentList "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload" -WorkingDirectory $projectDir -WindowStyle Normal -PassThru
     Start-Sleep -Seconds 3
 }
 
+# ---------- 启动前端 ----------
+$frontendProc = $null
+if (-not $SkipFrontend) {
+    Write-Host "`n       Start Vite dev server on port $FrontendPort ..." -ForegroundColor Yellow
+    # npm 在 Windows 上是 cmd 脚本，用 cmd /c 调用更稳定
+    $frontendProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev -- --port $FrontendPort" -WorkingDirectory $frontendDir -WindowStyle Normal -PassThru
+    Start-Sleep -Seconds 3
+}
+
+# ---------- 打印地址 ----------
 Write-Host "`n============================================" -ForegroundColor Green
 Write-Host "  OK!" -ForegroundColor Green
-Write-Host "  Frontend: http://localhost:$BackendPort/" -ForegroundColor Green
-Write-Host "  API Docs: http://localhost:$BackendPort/docs" -ForegroundColor Green
-Write-Host "  Health:   http://localhost:$BackendPort/api/health" -ForegroundColor Green
+if (-not $SkipFrontend) {
+    Write-Host "  Frontend: http://localhost:$FrontendPort/" -ForegroundColor Green
+}
+if (-not $SkipBackend) {
+    Write-Host "  API:      http://localhost:$BackendPort/" -ForegroundColor Green
+    Write-Host "  API Docs: http://localhost:$BackendPort/docs" -ForegroundColor Green
+    Write-Host "  Health:   http://localhost:$BackendPort/api/health" -ForegroundColor Green
+}
 Write-Host "============================================" -ForegroundColor Green
 Write-Host "`nPress any key to stop..." -ForegroundColor Gray
 
 $null = [System.Console]::ReadKey($true)
 
+# ---------- 停止 ----------
 Write-Host "`nStopping..." -ForegroundColor Yellow
 if ($backendProc -and -not $backendProc.HasExited) {
     Stop-Process -Id $backendProc.Id -Force -ErrorAction SilentlyContinue
 }
+if ($frontendProc -and -not $frontendProc.HasExited) {
+    Stop-Process -Id $frontendProc.Id -Force -ErrorAction SilentlyContinue
+}
 if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
+if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
 Write-Host "Done." -ForegroundColor Green

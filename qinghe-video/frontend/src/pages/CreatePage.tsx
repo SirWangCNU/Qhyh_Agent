@@ -1,10 +1,13 @@
+import { Link } from "react-router-dom";
 import { WheatStalk } from "@/components/shared/WheatMark";
+import { Button } from "@/components/ui/button";
 import { ShowcaseSection } from "@/components/home/ShowcaseSection";
+import { ROUTES } from "@/lib/constants";
 
 /**
  * 开始创作页（#/create）。
  * - Hero 区：品牌文案 + 麦穗插画
- * - 作品展示区：9 张农产品案例卡片（可点击跳转到对话创作）
+ * - 作品广场区：9 张农产品案例卡片（可点击跳转到对话创作）
  */
 export function CreatePage() {
   return (
@@ -13,11 +16,7 @@ export function CreatePage() {
       <section className="border-b border-border">
         <div className="container-app grid items-center gap-8 py-16 md:grid-cols-2">
           <div>
-            <span className="eyebrow">
-              <span className="num">01</span>
-              LangGraph 多 Agent 协同
-            </span>
-            <h1 className="mt-4 font-display text-4xl font-semibold leading-tight tracking-tight text-ink md:text-5xl">
+            <h1 className="font-display text-4xl font-semibold leading-tight tracking-tight text-ink md:text-5xl">
               让每一份农产品，
               <br />
               都有专属的<em className="not-italic text-primary">影像故事</em>。
@@ -36,6 +35,14 @@ export function CreatePage() {
                 </span>
               ))}
             </div>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button asChild>
+                <Link to={ROUTES.chat}>对话创作</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link to={ROUTES.workshop}>高级创作</Link>
+              </Button>
+            </div>
           </div>
           <div className="hidden justify-self-center md:flex" aria-hidden="true">
             <WheatStalk className="h-60 w-60 opacity-80" />
@@ -43,7 +50,7 @@ export function CreatePage() {
         </div>
       </section>
 
-      {/* 作品展示 */}
+      {/* 作品广场 */}
       <ShowcaseSection />
     </>
   );

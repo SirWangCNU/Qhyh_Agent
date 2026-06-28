@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Reveal } from "@/components/shared/Reveal";
 import { cn } from "@/lib/utils";
 
-/** 作品展示数据（移植自旧 chat.js SHOWCASE_WORKS）。 */
+/** 作品广场数据（移植自旧 chat.js SHOWCASE_WORKS）。 */
 export interface ShowcaseWork {
   title: string;
   desc: string;
@@ -90,7 +90,7 @@ interface ShowcaseSectionProps {
 }
 
 /**
- * 作品展示区域：9 张农产品短视频案例卡片网格。
+ * 作品广场区域：9 张农产品短视频案例卡片网格。
  * - 点击卡片 → 跳转到 /chat?work=xxx 并预填参考提示
  * - 卡片进入使用 Framer Motion 淡入升起效果
  * - 图片加载用 Skeleton 占位 + onLoad 淡入
@@ -109,7 +109,7 @@ export function ShowcaseSection({ className }: ShowcaseSectionProps) {
         <div className="module__head">
           <span className="eyebrow">
             <span className="num">02</span>
-            作品展示
+            作品广场
           </span>
           <h2 className="section-title">精选农产品短视频案例</h2>
           <p className="section-desc">参考优秀案例风格，点击卡片即可进入对话创作。</p>

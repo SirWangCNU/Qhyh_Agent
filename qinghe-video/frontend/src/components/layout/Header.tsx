@@ -10,12 +10,12 @@ import { cn } from "@/lib/utils";
 
 /**
  * 顶部导航栏。
- * - 左侧：品牌 mark + 文字（点击触发侧边栏开关，与旧版一致）
+ * - 左侧：品牌 mark + 文字（点击展开/收起侧边栏）
  * - 中间：5 个 NavLink
  * - 右侧：后端健康状态 + 登出按钮
  */
 export function Header() {
-  const toggleSidebar = useUIStore((s) => s.toggleSidebar);
+  const toggleSidebarVisible = useUIStore((s) => s.toggleSidebarVisible);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
@@ -30,7 +30,7 @@ export function Header() {
         <button
           type="button"
           data-brand-trigger
-          onClick={toggleSidebar}
+          onClick={toggleSidebarVisible}
           aria-label="展开/收起边栏"
           className="inline-flex items-center gap-2 rounded-md transition-transform hover:scale-[1.02] active:scale-[0.98]"
         >

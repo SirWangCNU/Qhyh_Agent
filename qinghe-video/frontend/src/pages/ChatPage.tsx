@@ -79,7 +79,7 @@ export function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // 从 URL 读取预填提示（来自作品展示卡片点击）
+  // 从 URL 读取预填提示（来自作品广场卡片点击）
   useEffect(() => {
     const seed = searchParams.get("seed");
     if (seed) {

@@ -18,6 +18,7 @@ export const STORAGE_KEYS = {
   sidebarCollapsed: "qinghe_sidebar_collapsed",
   plans: "qinghe_plans",
   pipeline: "qinghe_pipeline_state",
+  workshop: "qinghe_workshop_state",
 } as const;
 
 /** Agent 节点顺序（与后端 main.py 中 NODE_ORDER 一致）。 */
@@ -74,6 +75,48 @@ export const NODE_META: Record<
     desc: "汇总成完整方案",
   },
 };
+
+// ============================================================
+// 工坊 8 步流水线定义
+// ============================================================
+
+/** 工坊步骤 key（扩展自 NodeKey，增加媒体步骤） */
+export type WorkshopStepKey = NodeKey | "image_gen" | "tts" | "compose";
+
+/** 工坊步骤执行类型 */
+export type WorkshopStepType = "llm" | "image" | "tts" | "compose";
+
+/** 工坊步骤配置 */
+export interface WorkshopStepConfig {
+  key: WorkshopStepKey;
+  num: number;
+  title: string;
+  emoji: string;
+  kicker: string;
+  desc: string;
+  /** 卡片网格占位：1 = 单列，2 = 横跨两列 */
+  gridSpan: 1 | 2;
+  /** 卡片内副标题提示（更面向用户） */
+  description?: string;
+  type: WorkshopStepType;
+  deps: WorkshopStepKey[];
+  defaultAuto: boolean;
+}
+
+/** 8 步工坊流水线定义 */
+export const WORKSHOP_STEPS: WorkshopStepConfig[] = [
+  { key: "planner", num: 1, title: "策划", emoji: "📋", kicker: "PLANNER", desc: "一句话创意 → AI 润写 → 完整策划", gridSpan: 1, description: "输入产品名与一句话创意，AI 润写后生成完整策划", type: "llm", deps: [], defaultAuto: true },
+  { key: "copywriter", num: 2, title: "文案", emoji: "✍️", kicker: "COPYWRITER", desc: "Hook、口播、CTA", gridSpan: 1, description: "基于策划生成 Hook、口播稿与 CTA", type: "llm", deps: ["planner"], defaultAuto: true },
+  { key: "scriptwriter", num: 3, title: "脚本", emoji: "🎬", kicker: "SCRIPTWRITER", desc: "分镜、运镜、BGM", gridSpan: 2, description: "输出完整分镜表、运镜与 BGM 建议", type: "llm", deps: ["copywriter"], defaultAuto: true },
+  { key: "visual_designer", num: 4, title: "视觉", emoji: "🎨", kicker: "VISUAL", desc: "图片/视频 Prompt", gridSpan: 1, description: "定义视觉风格并生成各镜图片 Prompt", type: "llm", deps: ["scriptwriter"], defaultAuto: true },
+  { key: "distributor", num: 5, title: "投放", emoji: "📣", kicker: "DISTRIBUTOR", desc: "标题、标签、策略", gridSpan: 1, description: "生成发布标题、话题标签与投放策略", type: "llm", deps: ["visual_designer"], defaultAuto: false },
+  { key: "image_gen", num: 6, title: "出图", emoji: "🖼️", kicker: "IMAGE GEN", desc: "逐镜生成图片素材", gridSpan: 1, description: "按视觉 Prompt 逐镜生成图片素材", type: "image", deps: ["visual_designer"], defaultAuto: false },
+  { key: "tts", num: 7, title: "配音", emoji: "🔊", kicker: "TTS", desc: "合成旁白语音", gridSpan: 1, description: "将文案合成自然语音旁白", type: "tts", deps: ["copywriter"], defaultAuto: false },
+  { key: "compose", num: 8, title: "合成", emoji: "🎞️", kicker: "COMPOSE", desc: "图片+配音→竖屏视频", gridSpan: 2, description: "图片轮播 + 配音 → 合成竖屏视频", type: "compose", deps: ["image_gen", "tts"], defaultAuto: false },
+];
+
+/** 默认自动执行到第几步（视觉完成） */
+export const DEFAULT_AUTO_RUN_TO = 4;
 
 /** 前端路由表（hash 路由，与旧版兼容）。 */
 export const ROUTES = {

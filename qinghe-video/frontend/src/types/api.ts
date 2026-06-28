@@ -332,3 +332,19 @@ export interface Plan {
   messages?: ChatMessage[];
   state?: GenerateResult;
 }
+
+// ============================================================
+// AI 一句话润写 API（POST /api/text/polish）
+// ============================================================
+
+/** AI 润写请求（POST /api/text/polish）。 */
+export interface PolishRequest {
+  product_name: string;
+  one_liner: string;
+}
+
+/** AI 润写响应。 */
+export interface PolishResponse {
+  status: string;
+  input: UserInput;
+}

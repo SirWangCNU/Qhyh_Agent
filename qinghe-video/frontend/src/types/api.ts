@@ -41,6 +41,7 @@ export type AssetSource =
   | "image_studio"
   | "consistency"
   | "image_gen"
+  | "canvas"
   | "upload";
 
 /** 媒体类型。 */
@@ -92,6 +93,7 @@ export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
   image_studio: "图像工作室",
   consistency: "一致性生图",
   image_gen: "图片生成",
+  canvas: "无限画布",
   upload: "手动上传",
 };
 

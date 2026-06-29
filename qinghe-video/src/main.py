@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from src.agent_steps import AgentStep, AgentStepRequest, run_agent_step
 from src.assets import assets_router, record_asset, url_to_local_path
 from src.auth.dependencies import get_current_user
+from src.canvas.router import router as canvas_router
 from src.auth.router import router as auth_router
 from src.config import settings
 from src.consistency_images import consistency_images_router
@@ -71,6 +72,8 @@ app.include_router(image_studio_router)
 app.include_router(consistency_images_router)
 # 注册「我的资产」路由（用户生成媒体资产持久化）
 app.include_router(assets_router)
+# 注册无限画布路由（自由画布 + 多参考图生成）
+app.include_router(canvas_router)
 
 # 允许前端跨域访问
 app.add_middleware(
@@ -134,6 +137,7 @@ def index():
 @app.get("/create", summary="开始创作页面")
 @app.get("/workshop", summary="分步工坊页面")
 @app.get("/image-studio", summary="图像工作室页面")
+@app.get("/canvas", summary="无限画布页面")
 def spa_routes():
     """SPA 路由兼容：所有前端路径返回同一 index.html。"""
     return _serve_spa()

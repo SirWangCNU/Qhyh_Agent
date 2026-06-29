@@ -20,6 +20,7 @@ AssetSource = Literal[
     "image_studio",
     "consistency",
     "image_gen",
+    "canvas",
     "upload",
 ]
 

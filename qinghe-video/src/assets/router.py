@@ -78,9 +78,25 @@ def stats_endpoint(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> list[AssetStats]:
-    """按来源模块聚合：每个 source 的资产数量与总大小。"""
+    """按来源模块聚合：每个 source 的资产数量与总大小。
+
+    未知来源统一归入 'upload'，避免新增模块未同步枚举时统计接口 500。
+    """
     rows = get_stats(db, current_user.id)
-    return [AssetStats(source=r["source"], count=r["count"], total_size=r["total_size"]) for r in rows]
+    merged: dict[str, dict[str, int]] = {}
+    for r in rows:
+        source = r["source"]
+        if source not in _VALID_SOURCES:
+            logger.warning("[assets] 统计中发现未知 source=%s，归入 upload", source)
+            source = "upload"
+        bucket = merged.setdefault(source, {"count": 0, "total_size": 0})
+        bucket["count"] += int(r["count"])
+        bucket["total_size"] += int(r["total_size"] or 0)
+
+    return [
+        AssetStats(source=source, count=bucket["count"], total_size=bucket["total_size"])
+        for source, bucket in sorted(merged.items(), key=lambda x: x[1]["count"], reverse=True)
+    ]
 
 
 # ---------- 详情 ----------
@@ -154,14 +170,40 @@ def delete_asset_endpoint(
     return AssetDeleteResponse(status="deleted", id=asset_id)
 
 
+# 合法的来源枚举集合（与 models.AssetSource 保持一致）
+_VALID_SOURCES = {
+    "video_mvp",
+    "video_compose",
+    "tts",
+    "image_studio",
+    "consistency",
+    "image_gen",
+    "canvas",
+    "upload",
+}
+
+
 # ---------- 辅助 ----------
 
 def _to_response_dict(asset: Any) -> dict[str, Any]:
-    """把 ORM Asset 对象转为可被 AssetResponse 校验的 dict（解析 meta_json）。"""
+    """把 ORM Asset 对象转为可被 AssetResponse 校验的 dict（解析 meta_json）。
+
+    若 DB 中 source 不在当前合法枚举内（例如新增模块未同步枚举），
+    降级为 'upload' 并记警告，避免整个列表因单条脏数据 500。
+    """
+    source = asset.source
+    if source not in _VALID_SOURCES:
+        logger.warning(
+            "[assets] 未知 source=%s，降级为 upload (asset_id=%s)",
+            source,
+            asset.id,
+        )
+        source = "upload"
+
     return {
         "id": asset.id,
         "user_id": asset.user_id,
-        "source": asset.source,
+        "source": source,
         "media_type": asset.media_type,
         "filename": asset.filename,
         "url": asset.url,

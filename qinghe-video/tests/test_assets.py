@@ -343,3 +343,62 @@ def test_assets_list_filter_via_api():
     data = resp.json()
     assert data["total"] == 1
     assert data["items"][0]["media_type"] == "image"
+
+
+def test_canvas_source_asset_via_api():
+    """画布模块来源 'canvas' 的资产应被正常序列化，不 500。"""
+    client, token, _uid = _client_with_token("canvas_user")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    db = TestSession()
+    user = db.query(User).filter(User.username == "canvas_user").first()
+    record_asset(
+        db,
+        user.id,
+        source="canvas",
+        media_type="image",
+        url="/outputs/image/canvas_123.jpg",
+        file_path="/p/canvas_123.jpg",
+        filename="canvas_123.jpg",
+    )
+
+    resp = client.get("/api/assets", headers=headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total"] == 1
+    assert data["items"][0]["source"] == "canvas"
+
+    # 统计里也应出现 canvas
+    resp = client.get("/api/assets/stats", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert any(s["source"] == "canvas" and s["count"] == 1 for s in resp.json())
+
+
+def test_unknown_source_falls_back_to_upload():
+    """DB 中出现未知 source 时，接口应降级为 upload 返回，而不是整体 500。"""
+    client, token, _uid = _client_with_token("unknown_source_user")
+    headers = {"Authorization": f"Bearer {token}"}
+
+    db = TestSession()
+    user = db.query(User).filter(User.username == "unknown_source_user").first()
+    record_asset(
+        db,
+        user.id,
+        source="some_future_module",
+        media_type="image",
+        url="/outputs/image/future.jpg",
+        file_path="/p/future.jpg",
+        filename="future.jpg",
+    )
+
+    resp = client.get("/api/assets", headers=headers)
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data["total"] == 1
+    # 未知 source 被降级为 upload
+    assert data["items"][0]["source"] == "upload"
+
+    # 统计端点同理聚合到 upload
+    resp = client.get("/api/assets/stats", headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert any(s["source"] == "upload" and s["count"] == 1 for s in resp.json())

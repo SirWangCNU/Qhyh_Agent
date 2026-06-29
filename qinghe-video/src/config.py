@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     IMAGE_RESPONSE_FORMAT: str = "url"
     VIDEO_MODEL: str = "doubao-seedance-2-0-260128"
     VIDEO_SIZE: str = "1280x720"
+    # 前端可选的图片模型列表（逗号分隔），未配置时回退为 [IMAGE_MODEL]。
+    # 供无限画布生成节点的模型下拉框使用。
+    IMAGE_MODEL_OPTIONS: str = ""
 
     # ---------- 图像处理工作室配置（九宫格导演板） ----------
     IMAGE_STUDIO_CELL_SIZE: str = "640x640"     # 九宫格单格尺寸
@@ -119,3 +122,27 @@ def get_system_prompt(prompt_name: str) -> str:
         str: 已转义的 prompt 文本内容。
     """
     return get_prompt(prompt_name).replace("{", "{{").replace("}", "}}")
+
+
+def get_image_model_options() -> list[str]:
+    """解析前端可选的图片模型列表。
+
+    优先读取 ``IMAGE_MODEL_OPTIONS``（逗号分隔），为空时回退为 ``[IMAGE_MODEL]``，
+    去重并保留顺序。
+
+    Returns:
+        list[str]: 可选模型 id 列表，至少包含 1 项。
+    """
+    raw = settings.IMAGE_MODEL_OPTIONS.strip()
+    if not raw:
+        return [settings.IMAGE_MODEL]
+    seen: set[str] = set()
+    options: list[str] = []
+    for item in raw.split(","):
+        name = item.strip()
+        if name and name not in seen:
+            seen.add(name)
+            options.append(name)
+    if settings.IMAGE_MODEL not in seen:
+        options.insert(0, settings.IMAGE_MODEL)
+    return options

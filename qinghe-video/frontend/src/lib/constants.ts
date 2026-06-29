@@ -11,7 +11,7 @@
 export const BACKEND_URL =
   (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/+$/, "") || "";
 
-/** LocalStorage 键名（与旧 HTML 版本完全保持兼容，便于书签/会话延续）。 */
+/** LocalStorage / sessionStorage 键名（与旧 HTML 版本完全保持兼容，便于书签/会话延续）。 */
 export const STORAGE_KEYS = {
   token: "qinghe_token",
   user: "qinghe_user",
@@ -19,6 +19,8 @@ export const STORAGE_KEYS = {
   plans: "qinghe_plans",
   pipeline: "qinghe_pipeline_state",
   workshop: "qinghe_workshop_state",
+  /** 无限画布会话（sessionStorage，仅存 projectId/name）。 */
+  canvas: "qinghe_canvas_session",
 } as const;
 
 /** Agent 节点顺序（与后端 main.py 中 NODE_ORDER 一致）。 */
@@ -125,6 +127,7 @@ export const ROUTES = {
   chat: "/chat",
   workshop: "/workshop",
   imageStudio: "/image-studio",
+  canvas: "/canvas",
   agents: "/agents",
   plan: "/plan",
   assets: "/assets",
@@ -140,6 +143,7 @@ export const NAV_LINKS: Array<{
   { to: ROUTES.chat, label: "对话创作", route: ROUTES.chat },
   { to: ROUTES.workshop, label: "分步工坊", route: ROUTES.workshop },
   { to: ROUTES.imageStudio, label: "图像工作室", route: ROUTES.imageStudio },
+  { to: ROUTES.canvas, label: "无限画布", route: ROUTES.canvas },
   { to: ROUTES.agents, label: "Agent 管理", route: ROUTES.agents },
   { to: ROUTES.assets, label: "我的资产", route: ROUTES.assets },
 ];

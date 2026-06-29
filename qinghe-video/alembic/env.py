@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 from src.db.database import Base, SQLITE_URL
 from src.db import models  # noqa: F401 — 确保 ORM 模型被加载到 Base.metadata
+from src.canvas import persistence as _canvas_persistence  # noqa: F401 — 加载 CanvasProjectORM
 
 config = context.config
 config.set_main_option("sqlalchemy.url", SQLITE_URL)

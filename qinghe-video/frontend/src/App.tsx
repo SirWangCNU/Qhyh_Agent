@@ -5,6 +5,7 @@ import { router } from "@/routes";
 import { useAuthStore } from "@/stores/auth-store";
 import { useUIStore } from "@/stores/ui-store";
 import { usePipelineStore } from "@/stores/pipeline-store";
+import { useWorkshopStore } from "@/stores/workshop-store";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,6 +23,7 @@ export default function App() {
     useAuthStore.getState().hydrate();
     useUIStore.getState().hydrate();
     usePipelineStore.getState().hydrate();
+    useWorkshopStore.getState().hydrate();
   }, []);
 
   return (

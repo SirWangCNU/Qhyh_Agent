@@ -2,8 +2,10 @@ import { AlertCircle, Download } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AgentOutputView } from "@/components/agent/AgentOutputView";
+import { ConsistencyImagesPanel } from "@/components/workshop/ConsistencyImagesPanel";
 import { resolveMediaUrl } from "@/hooks/use-agents";
 import { WORKSHOP_STEPS, type WorkshopStepKey, type NodeKey } from "@/lib/constants";
+import { useWorkshopStore } from "@/stores/workshop-store";
 import type { WorkshopMediaResults, WorkshopStepStatus } from "@/stores/workshop-store";
 
 interface WorkshopStepContentProps {
@@ -30,6 +32,45 @@ export function WorkshopStepContent({
 }: WorkshopStepContentProps) {
   const cfg = WORKSHOP_STEPS.find((s) => s.key === step);
   if (!cfg) return null;
+
+  // 一致性生图步骤：面板始终可见，用户在子卡片中独立生成
+  if (step === "consistency_images") {
+    return (
+      <div className="min-h-[80px]">
+        {errorMsg && (
+          <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
+            <AlertCircle size={12} className="mr-1 inline" />
+            {errorMsg}
+          </div>
+        )}
+        <ConsistencyImagesPanel />
+      </div>
+    );
+  }
+
+  // 出图步骤：顶部始终显示人物参考图开关（B1 联动），下方走原 status 分支
+  if (step === "image_gen") {
+    return (
+      <div className="min-h-[80px]">
+        {errorMsg && (
+          <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 p-2.5 text-xs text-destructive">
+            <AlertCircle size={12} className="mr-1 inline" />
+            {errorMsg}
+          </div>
+        )}
+        <ImageGenRefToggle />
+        {status === "running" && <DetailSkeleton />}
+        {status === "done" && (
+          <DetailContent step={step} output={output} mediaResults={mediaResults} />
+        )}
+        {(status === "pending" || status === "error") && !errorMsg && (
+          <p className="py-4 text-center text-xs text-ink-faint">
+            {status === "error" ? "步骤执行失败，可点击重试" : "等待执行"}
+          </p>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[80px]">
@@ -157,4 +198,31 @@ function DetailContent({
   }
 
   return null;
+}
+
+/**
+ * 出图步骤「使用人物参考图（图生图）」开关。
+ * 读取/写入 store.imageGenUseCharacterRef；未生成人物一致性图时禁用并提示。
+ */
+function ImageGenRefToggle() {
+  const checked = useWorkshopStore((s) => s.imageGenUseCharacterRef);
+  const setChecked = useWorkshopStore((s) => s.setImageGenUseCharacterRef);
+  const hasCharacterImage = useWorkshopStore(
+    (s) => s.mediaResults.characterImage?.status === "done",
+  );
+  return (
+    <label className="mb-3 flex cursor-pointer items-center gap-2 rounded-md border border-border bg-secondary/20 px-3 py-2 text-xs">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => setChecked(e.target.checked)}
+        disabled={!hasCharacterImage}
+        className="h-3.5 w-3.5 cursor-pointer disabled:cursor-not-allowed"
+      />
+      <span>使用人物参考图（图生图）</span>
+      {!hasCharacterImage && (
+        <span className="text-ink-faint">— 请先在第 3 步生成人物一致性图</span>
+      )}
+    </label>
+  );
 }

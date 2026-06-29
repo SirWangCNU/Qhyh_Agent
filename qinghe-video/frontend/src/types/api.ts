@@ -29,6 +29,82 @@ export interface HealthResponse {
   version: string;
 }
 
+// ============================================================
+// 我的资产（/api/assets）
+// ============================================================
+
+/** 资产来源模块（与后端 src/assets/models.py AssetSource 对齐）。 */
+export type AssetSource =
+  | "video_mvp"
+  | "video_compose"
+  | "tts"
+  | "image_studio"
+  | "consistency"
+  | "image_gen"
+  | "upload";
+
+/** 媒体类型。 */
+export type AssetMediaType = "image" | "video" | "audio";
+
+/** 单条资产（GET /api/assets/{id} 或列表项）。 */
+export interface Asset {
+  id: number;
+  user_id: number;
+  source: AssetSource;
+  media_type: AssetMediaType;
+  filename: string;
+  url: string;
+  file_size: number | null;
+  mime_type: string | null;
+  title: string | null;
+  meta_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** 资产列表分页响应（GET /api/assets）。 */
+export interface AssetListResponse {
+  items: Asset[];
+  total: number;
+  page: number;
+  page_size: number;
+  source_filter: string | null;
+  media_type_filter: string | null;
+}
+
+/** 按来源模块聚合的统计项（GET /api/assets/stats）。 */
+export interface AssetStats {
+  source: AssetSource;
+  count: number;
+  total_size: number;
+}
+
+/** 删除资产响应（DELETE /api/assets/{id}）。 */
+export interface AssetDeleteResponse {
+  status: string;
+  id: number;
+}
+
+/** 来源模块的中文展示名（前端筛选用）。 */
+export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
+  video_mvp: "一键成片",
+  video_compose: "视频合成",
+  tts: "TTS 配音",
+  image_studio: "图像工作室",
+  consistency: "一致性生图",
+  image_gen: "图片生成",
+  upload: "手动上传",
+};
+
+/** 单个爆款主题候选。字段与后端 TopicCandidate 严格对齐。 */
+export interface TopicCandidate {
+  theme: string;
+  creative_angle: string;
+  pain_point: string;
+  target_audience: string;
+  traffic_hook: string;
+  appeal_reason: string;
+}
+
 /** SSE 事件联合类型。 */
 export type SSEEvent =
   | { event: "start"; data: { task_id: string; nodes: string[] } }
@@ -52,6 +128,7 @@ export type SSEEvent =
 
 /** 完整生成结果（pipeline 累计 state）。 */
 export interface GenerateResult {
+  selected_topic?: TopicCandidate;
   planner_output?: PlannerOutput;
   copywriter_output?: CopywriterOutput;
   scriptwriter_output?: ScriptwriterOutput;
@@ -59,6 +136,15 @@ export interface GenerateResult {
   distributor_output?: DistributorOutput;
   final_report?: string;
   error?: string | null;
+  /** 工坊第 3 步建立的一致性参考（人物/物品/场景主体描述），注入 visual_designer */
+  consistency_references?: ConsistencyReferences;
+}
+
+/** 一致性参考主体描述（仅存文本，不存 url）。键为类型，值为 subject 描述。 */
+export interface ConsistencyReferences {
+  character?: string;
+  object?: string;
+  scene?: string;
 }
 
 // ============================================================
@@ -97,6 +183,13 @@ export interface BodySegment {
   delivery_note: string;
 }
 
+export interface ConsistencyPlan {
+  character_subject?: string;
+  object_subject?: string;
+  scene_subject?: string;
+  style_preference?: string;
+}
+
 export interface CopywriterOutput {
   hook: HookSegment;
   body: BodySegment[];
@@ -104,6 +197,7 @@ export interface CopywriterOutput {
   full_script: string;
   estimated_duration_seconds: number;
   word_count: number;
+  consistency_plan?: ConsistencyPlan;
 }
 
 export interface BgmSuggestion {
@@ -203,6 +297,7 @@ export interface DistributorOutput {
 export interface AgentStepRequest {
   input: UserInput;
   state: Partial<GenerateResult>;
+  selected_topic?: TopicCandidate | null;
 }
 
 export interface AgentStepResponse {
@@ -230,6 +325,8 @@ export interface ImageGenerationRequest {
   negative_prompt?: string;
   size?: string;
   n?: number;
+  /** 可选参考图路径（/outputs/image/xxx.jpg），存在则走图生图。 */
+  reference_image_path?: string;
 }
 
 export interface GeneratedImage {
@@ -310,6 +407,32 @@ export interface ImageStudioResponse {
 }
 
 // ============================================================
+// 一致性生图（人物/物品/场景，multipart/form，参考图可选）
+// ============================================================
+
+export type ConsistencyImageType = "character" | "object" | "scene";
+export type ConsistencyMode = "image_to_image" | "text_to_image";
+
+export interface ConsistencyImageResponse {
+  status: "success" | "error";
+  image_type: ConsistencyImageType;
+  image_url: string;
+  prompt: string;
+  consistency_mode: ConsistencyMode;
+  subject: string;
+  error?: string;
+}
+
+/** 工坊 mediaResults 中单类一致性图的状态槽。 */
+export interface ConsistencyImageSlot {
+  url: string;
+  prompt: string;
+  mode: ConsistencyMode;
+  status: "loading" | "done" | "error";
+  error?: string;
+}
+
+// ============================================================
 // 方案历史（LocalStorage）
 // ============================================================
 
@@ -349,4 +472,22 @@ export interface PolishRequest {
 export interface PolishResponse {
   status: string;
   input: UserInput;
+}
+
+// ============================================================
+// AI 爆款选题 API（POST /api/topics/generate）
+// ============================================================
+
+/** AI 选题请求（POST /api/topics/generate）。 */
+export interface TopicRequest {
+  product_name: string;
+  one_liner: string;
+  target_platform?: string;
+  count?: number;
+}
+
+/** AI 选题响应。 */
+export interface TopicResponse {
+  status: string;
+  topics: TopicCandidate[];
 }

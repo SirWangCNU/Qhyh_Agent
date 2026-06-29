@@ -19,6 +19,7 @@ from pydantic import ValidationError
 from src.config import PROJECT_ROOT
 from src.image_studio.models import DirectorBoardOutput
 from src.nodes.llm import get_llm
+from src.utils.json_parser import invoke_structured_llm
 
 logger = logging.getLogger(__name__)
 
@@ -98,15 +99,13 @@ def build_variant_prompts(
         system_prompt = _fill_template(template, image_type, subject, style_preference)
 
         llm = get_llm(temperature=0.8)
-        structured_llm = llm.with_structured_output(DirectorBoardOutput)
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_prompt),
                 ("human", "请严格按 9 个维度顺序生成 9 个风格变体，输出纯 JSON。"),
             ]
         )
-        chain = prompt | structured_llm
-        result: DirectorBoardOutput = chain.invoke({})
+        result: DirectorBoardOutput = invoke_structured_llm(llm, prompt, DirectorBoardOutput, {})
 
         _validate_output(result)
         logger.info(

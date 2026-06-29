@@ -1,14 +1,18 @@
 """LLM JSON 输出解析工具。
 
 提供对大型语言模型生成的、可能不合法的 JSON 进行清洗、修复与校验的能力。
+包含健壮的结构化输出调用链，优先使用 LangChain with_structured_output，
+失败时回退到原始文本输出 + json_repair 修复解析。
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import Type, TypeVar
+from typing import Any, Type, TypeVar
 
+from langchain_core.messages import AIMessage
+from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, ValidationError
 
 try:
@@ -98,3 +102,41 @@ def parse_llm_json(raw: str, model_class: Type[T]) -> T:
             }
         ],
     )
+
+
+def invoke_structured_llm(
+    llm: Any,
+    prompt: ChatPromptTemplate,
+    model_class: Type[T],
+    invoke_args: dict[str, Any],
+) -> T:
+    """健壮地调用 LLM 并将输出解析为指定的 Pydantic 模型。
+
+    直接获取 LLM 原始文本输出，然后使用 ``parse_llm_json``（含 json_repair 修复）解析，
+    能够容错 LLM 输出中常见的 JSON 格式问题（未转义引号、缺少逗号、中文标点等）。
+    若模型支持 ``response_format=json_object`` 则自动启用。
+
+    Args:
+        llm: 已配置好 temperature 等参数的 ChatOpenAI 实例或兼容 LangChain chat model。
+        prompt: ChatPromptTemplate 实例（system prompt 中应包含明确的 JSON 格式要求）。
+        model_class: 目标 Pydantic 模型类。
+        invoke_args: 传入 prompt 的变量字典。
+
+    Returns:
+        T: 校验通过的模型实例。
+
+    Raises:
+        ValidationError: 解析或校验失败时抛出。
+    """
+    json_llm = llm
+    try:
+        json_llm = llm.bind(response_format={"type": "json_object"})
+    except Exception:
+        logger.debug("[invoke_structured_llm] 模型不支持 response_format=json_object，使用默认模式")
+
+    chain = prompt | json_llm
+    message: AIMessage = chain.invoke(invoke_args)
+    raw_text = message.content if isinstance(message.content, str) else str(message.content)
+
+    logger.debug("[invoke_structured_llm] LLM 原始输出前500字符: %s", raw_text[:500])
+    return parse_llm_json(raw_text, model_class)

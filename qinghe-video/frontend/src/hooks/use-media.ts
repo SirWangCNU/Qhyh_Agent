@@ -1,6 +1,8 @@
 import { useMutation } from "@tanstack/react-query";
 import { apiFetch, apiPost, getAuthToken } from "@/lib/api";
 import type {
+  ConsistencyImageResponse,
+  ConsistencyImageType,
   ImageStudioImageType,
   ImageStudioResponse,
   ImageGenerationResponse,
@@ -53,6 +55,54 @@ export function useImageStudioGenerate() {
         throw new Error(detail);
       }
       return (await resp.json()) as ImageStudioResponse;
+    },
+  });
+}
+
+/**
+ * 一致性生图 hook（POST /api/consistency-images/generate，multipart/form）。
+ *
+ * 字段：image_type、subject、style_preference?、size?、negative_prompt?、reference_image?(File)
+ * 响应：{ status, image_type, image_url, prompt, consistency_mode, subject }
+ *
+ * 参考图可选：有则图生图，无则纯文生图。
+ */
+export function useConsistencyImageGenerate() {
+  return useMutation({
+    mutationFn: async (params: {
+      imageType: ConsistencyImageType;
+      subject: string;
+      stylePreference?: string;
+      size?: string;
+      negativePrompt?: string;
+      referenceImage?: File | null;
+    }) => {
+      const fd = new FormData();
+      fd.append("image_type", params.imageType);
+      fd.append("subject", params.subject);
+      if (params.stylePreference) fd.append("style_preference", params.stylePreference);
+      if (params.size) fd.append("size", params.size);
+      if (params.negativePrompt) fd.append("negative_prompt", params.negativePrompt);
+      if (params.referenceImage) fd.append("reference_image", params.referenceImage);
+
+      const token = getAuthToken();
+      const backend = (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/+$/, "");
+      const resp = await fetch(`${backend}/api/consistency-images/generate`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      });
+      if (!resp.ok) {
+        let detail = `HTTP ${resp.status}`;
+        try {
+          const data = await resp.json();
+          if (data?.detail) detail = String(data.detail);
+        } catch {
+          /* ignore */
+        }
+        throw new Error(detail);
+      }
+      return (await resp.json()) as ConsistencyImageResponse;
     },
   });
 }

@@ -64,6 +64,25 @@ class BodySegment(BaseModel):
     delivery_note: str
 
 
+class ConsistencyPlan(BaseModel):
+    """文案 Agent 为一致性生图生成的视觉规划。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    character_subject: str | None = Field(
+        None, description="人物主体描述，用于第 3 步人物一致性生图"
+    )
+    object_subject: str | None = Field(
+        None, description="物品主体描述，用于第 3 步物品一致性生图"
+    )
+    scene_subject: str | None = Field(
+        None, description="场景主体描述，用于第 3 步场景一致性生图"
+    )
+    style_preference: str | None = Field(
+        None, description="三类一致性图的统一风格偏好，如真实棚拍、自然光、暖色调"
+    )
+
+
 class CopywriterOutput(BaseModel):
     """文案 Agent 输出。"""
 
@@ -75,6 +94,9 @@ class CopywriterOutput(BaseModel):
     full_script: str
     estimated_duration_seconds: int
     word_count: int
+    consistency_plan: ConsistencyPlan | None = Field(
+        None, description="为后续一致性生图规划的人物/物品/场景主体描述与统一风格"
+    )
 
 
 # ============================================================
@@ -225,6 +247,22 @@ class DistributorOutput(BaseModel):
     publish_strategy: PublishStrategy
     promotion_suggestions: list[PromotionSuggestion]
     platform_specific_notes: str
+
+
+# ============================================================
+# 用户选定的选题（从爆款选题候选中选择）
+# ============================================================
+class SelectedTopic(BaseModel):
+    """用户从爆款候选主题中选定的选题。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    theme: str = Field(..., description="选定的爆款主题标题")
+    creative_angle: str = Field(..., description="创意角度/切入点")
+    pain_point: str = Field(..., description="用户痛点或共鸣点")
+    target_audience: str = Field(..., description="预期受众画像")
+    traffic_hook: str = Field(..., description="开头3秒钩子")
+    appeal_reason: str = Field(..., description="爆款潜力理由")
 
 
 # ============================================================

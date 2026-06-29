@@ -10,8 +10,12 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from pathlib import Path
+from sqlalchemy.orm import Session
 
+from src.assets import record_asset, url_to_local_path
 from src.auth.dependencies import get_current_user
+from src.db.database import get_db
 from src.db.models import User
 from src.image_studio.grid_composer import compose_grid
 from src.image_studio.image_variants import encode_upload_to_b64, generate_variants
@@ -33,6 +37,7 @@ async def generate_director_board(
     size: str | None = Form(None, description="单图尺寸，如 1024x1024"),
     reference_image: UploadFile = File(..., description="参考图文件"),
     _current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> dict[str, Any]:
     """完整流程：上传图 → LLM 生成 9 变体 prompt → 并发图生图 → 拼九宫格 → 返回。"""
     # 1. 参数校验
@@ -70,6 +75,27 @@ async def generate_director_board(
 
         # 5. 拼九宫格
         grid_url = compose_grid(image_results)
+
+        # 自动收集：九宫格主图落库到资产表（meta 存各变体 URL，失败仅记日志）
+        try:
+            variant_urls = [v.url for v in image_results if getattr(v, "url", None)]
+            record_asset(
+                db,
+                _current_user.id,
+                source="image_studio",
+                media_type="image",
+                url=grid_url,
+                file_path=url_to_local_path(grid_url),
+                filename=Path(grid_url).name if grid_url else None,
+                title=director_board.subject,
+                meta={
+                    "variants": variant_urls,
+                    "image_type": director_board.image_type,
+                    "consistency_key": director_board.consistency_key,
+                },
+            )
+        except Exception:
+            logger.warning("[assets] 图像工作室资产落库失败 url=%s", grid_url, exc_info=True)
 
         # 6. 返回结果
         return {

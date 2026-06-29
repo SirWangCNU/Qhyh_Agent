@@ -10,8 +10,18 @@ export default defineConfig({
     server: {
         port: 5173,
         proxy: {
-            "/api": { target: "http://localhost:18739", changeOrigin: true },
-            "/outputs": { target: "http://localhost:18739", changeOrigin: true },
+            "/api": {
+                target: "http://localhost:18739",
+                changeOrigin: true,
+                timeout: 200000,
+                proxyTimeout: 200000,
+            },
+            "/outputs": {
+                target: "http://localhost:18739",
+                changeOrigin: true,
+                timeout: 200000,
+                proxyTimeout: 200000,
+            },
         },
     },
     build: {

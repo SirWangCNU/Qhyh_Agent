@@ -15,7 +15,7 @@ from pydantic import ValidationError
 from src.config import get_system_prompt
 from src.models import ScriptwriterOutput
 from src.nodes.llm import get_llm
-from src.utils.json_parser import parse_llm_json
+from src.utils.json_parser import invoke_structured_llm
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,6 @@ def scriptwriter_node(state: dict[str, Any]) -> dict[str, Any]:
                 (
                     "human",
                     "请根据以下策划与文案生成分镜脚本。\n\n"
-                    "要求：\n"
-                    "1. 直接输出合法 JSON，不要添加 markdown 代码块（如 ```json）或额外解释；\n"
-                    "2. JSON 字符串值中如果出现换行，请使用 \\n 转义，不要出现未转义的换行符；\n"
-                    "3. 字段类型与结构必须严格符合 system prompt 中的 JSON Schema。\n\n"
                     "【产品信息】\n"
                     "产品：{product_name}，产地：{origin}，目标平台：{target_platform}，目标时长：{target_duration}\n\n"
                     "【策划方案】\n{planner_output}\n\n"
@@ -56,8 +52,10 @@ def scriptwriter_node(state: dict[str, Any]) -> dict[str, Any]:
             ]
         )
 
-        chain = prompt | llm
-        raw_output = chain.invoke(
+        result: ScriptwriterOutput = invoke_structured_llm(
+            llm,
+            prompt,
+            ScriptwriterOutput,
             {
                 "product_name": state.get("product_name", ""),
                 "origin": state.get("origin", ""),
@@ -65,11 +63,8 @@ def scriptwriter_node(state: dict[str, Any]) -> dict[str, Any]:
                 "target_duration": state.get("target_duration", "30-60秒"),
                 "planner_output": json.dumps(planner_output, ensure_ascii=False, indent=2),
                 "copywriter_output": json.dumps(copywriter_output, ensure_ascii=False, indent=2),
-            }
+            },
         )
-
-        # 使用增强型 JSON 解析器：先清洗 markdown 代码块，再尝试 json_repair 修复
-        result: ScriptwriterOutput = parse_llm_json(raw_output.content, ScriptwriterOutput)
 
         logger.info(
             "[Scriptwriter] 分镜脚本生成完成，镜头数=%d，总时长=%ds",

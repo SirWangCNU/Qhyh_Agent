@@ -21,17 +21,22 @@ from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from src.agent_steps import AgentStep, AgentStepRequest, run_agent_step
+from src.assets import assets_router, record_asset, url_to_local_path
 from src.auth.dependencies import get_current_user
 from src.auth.router import router as auth_router
 from src.config import settings
+from src.consistency_images import consistency_images_router
+from src.db.database import get_db
 from src.db.models import User
 from src.graph import app_graph
 from src.image_generation import ImageGenerationRequest, generate_image
 from src.image_studio import image_studio_router
 from src.models import UserInput
 from src.text_polish import PolishRequest, polish_user_input
+from src.topic_generation import TopicRequest, generate_topics
 from src.tts_service import synthesize as tts_synthesize, _synthesize_async
 from src.video_compose import compose as compose_video
 from src.video_generation import VideoGenerationRequest, build_video_preview
@@ -62,6 +67,10 @@ app = FastAPI(
 app.include_router(auth_router)
 # 注册图像处理工作室路由
 app.include_router(image_studio_router)
+# 注册一致性生图路由（人物/物品/场景参考图）
+app.include_router(consistency_images_router)
+# 注册「我的资产」路由（用户生成媒体资产持久化）
+app.include_router(assets_router)
 
 # 允许前端跨域访问
 app.add_middleware(
@@ -88,8 +97,10 @@ _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 _OUTPUTS_DIR = _PROJECT_ROOT / "outputs"
 _AUDIO_DIR = _OUTPUTS_DIR / "audio"
 _VIDEO_DIR = _OUTPUTS_DIR / "video"
+_UPLOAD_DIR = _OUTPUTS_DIR / "upload"
 _AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/outputs", StaticFiles(directory=str(_OUTPUTS_DIR)), name="outputs")
 
 
@@ -164,14 +175,47 @@ def polish_text_api(req: PolishRequest, _current_user: User = Depends(get_curren
     return {"status": "success", "input": result.model_dump()}
 
 
+@app.post("/api/topics/generate", summary="AI 生成爆款候选主题")
+def generate_topics_api(req: TopicRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+    """基于「产品名 + 一句话创意」生成多个差异化的爆款主题候选，供用户选择。
+
+    返回字段：
+    - ``status``: 固定 "success"
+    - ``topics``: 候选主题列表，每个含 theme/creative_angle/pain_point/target_audience/traffic_hook/appeal_reason
+    """
+    try:
+        result = generate_topics(req)
+    except Exception as e:
+        logger.exception("[API] 选题生成失败")
+        raise HTTPException(status_code=500, detail=f"选题失败: {e}") from e
+    return {"status": "success", "topics": [t.model_dump() for t in result.topics]}
+
+
 @app.post("/api/images/generate", summary="生成图片素材")
-async def generate_image_asset(payload: ImageGenerationRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def generate_image_asset(payload: ImageGenerationRequest, _current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     """使用配置的图片模型生成视觉素材。"""
     try:
         images = await generate_image(payload)
     except Exception as e:
         logger.exception("[API] 图片生成失败")
         raise HTTPException(status_code=500, detail=f"图片生成失败: {e}") from e
+
+    # 自动收集：每张图落库到资产表（失败仅记日志，不阻断主流程）
+    for item in images:
+        if not item.url:
+            continue
+        try:
+            record_asset(
+                db,
+                _current_user.id,
+                source="image_gen",
+                media_type="image",
+                url=item.url,
+                file_path=url_to_local_path(item.url),
+                title=(payload.prompt[:80] if payload.prompt else None),
+            )
+        except Exception:
+            logger.warning("[assets] 图片生成资产落库失败 url=%s", item.url, exc_info=True)
 
     return {
         "status": "success",
@@ -196,7 +240,7 @@ class TTSRequest(BaseModel):
 
 
 @app.post("/api/tts/generate", summary="合成旁白配音")
-async def generate_tts(req: TTSRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def generate_tts(req: TTSRequest, _current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     """使用 edge-tts 将文本合成为 mp3 音频，写入 outputs/audio/ 目录。
 
     返回字段：
@@ -219,10 +263,26 @@ async def generate_tts(req: TTSRequest, _current_user: User = Depends(get_curren
         logger.exception("[API] TTS 合成失败 filename=%s", filename)
         raise HTTPException(status_code=500, detail=f"TTS 合成失败: {e}") from e
 
+    audio_url = f"/outputs/audio/{filename}"
+    # 自动收集：落库到资产表（失败仅记日志，不阻断主流程）
+    try:
+        record_asset(
+            db,
+            _current_user.id,
+            source="tts",
+            media_type="audio",
+            url=audio_url,
+            file_path=str(audio_path),
+            filename=filename,
+            mime_type="audio/mpeg",
+        )
+    except Exception:
+        logger.warning("[assets] TTS 资产落库失败 url=%s", audio_url, exc_info=True)
+
     return {
         "status": "success",
         "audio_path": str(audio_path),
-        "audio_url": f"/outputs/audio/{filename}",
+        "audio_url": audio_url,
     }
 
 
@@ -236,7 +296,7 @@ class VideoComposeRequest(BaseModel):
 
 
 @app.post("/api/video/compose", summary="合成竖屏 mp4 视频")
-async def compose_video_endpoint(req: VideoComposeRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def compose_video_endpoint(req: VideoComposeRequest, _current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     """把分镜图片轮播 + TTS 旁白拼接为 9:16 竖屏 mp4。
 
     返回字段：
@@ -261,16 +321,32 @@ async def compose_video_endpoint(req: VideoComposeRequest, _current_user: User =
         logger.exception("[API] 视频合成失败 filename=%s", filename)
         raise HTTPException(status_code=500, detail=f"视频合成失败: {e}") from e
 
+    video_url = f"/outputs/video/{filename}"
+    # 自动收集：落库到资产表（失败仅记日志，不阻断主流程）
+    try:
+        record_asset(
+            db,
+            _current_user.id,
+            source="video_compose",
+            media_type="video",
+            url=video_url,
+            file_path=str(video_path),
+            filename=filename,
+            mime_type="video/mp4",
+        )
+    except Exception:
+        logger.warning("[assets] 视频合成资产落库失败 url=%s", video_url, exc_info=True)
+
     return {
         "status": "success",
         "video_path": str(video_path),
-        "video_url": f"/outputs/video/{filename}",
+        "video_url": video_url,
     }
 
 
 # ---------- 一键成片 ----------
 @app.post("/api/video/mvp", summary="一键成片（分镜取图 → TTS → 视频合成）")
-async def video_mvp_endpoint(req: VideoMvpRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
+async def video_mvp_endpoint(req: VideoMvpRequest, _current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
     """一键成片：从 workshop state 取分镜 prompt → 逐镜生图 → TTS 合成 → 视频合成。
 
     请求体传入完整流水线 state（至少含 ``visual_output.shot_prompts``，
@@ -283,7 +359,7 @@ async def video_mvp_endpoint(req: VideoMvpRequest, _current_user: User = Depends
     - ``duration_estimate``: 预估视频时长（秒）
     """
     try:
-        return await run_video_mvp(req, _AUDIO_DIR, _VIDEO_DIR)
+        result = await run_video_mvp(req, _AUDIO_DIR, _VIDEO_DIR)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except RuntimeError as e:
@@ -291,6 +367,41 @@ async def video_mvp_endpoint(req: VideoMvpRequest, _current_user: User = Depends
     except Exception as e:
         logger.exception("[API] 一键成片失败")
         raise HTTPException(status_code=500, detail=f"一键成片失败: {e}") from e
+
+    # 自动收集：视频（主）+ 旁白音频 各落库一条（失败仅记日志，不阻断主流程）
+    video_url = result.get("video_url") or ""
+    audio_url = result.get("audio_url") or ""
+    image_count = result.get("image_count")
+    meta = {"image_count": image_count, "task_id": result.get("task_id")} if image_count is not None else None
+    try:
+        if video_url:
+            record_asset(
+                db,
+                _current_user.id,
+                source="video_mvp",
+                media_type="video",
+                url=video_url,
+                file_path=url_to_local_path(video_url),
+                filename=Path(video_url).name,
+                mime_type="video/mp4",
+                meta=meta,
+            )
+        if audio_url:
+            record_asset(
+                db,
+                _current_user.id,
+                source="video_mvp",
+                media_type="audio",
+                url=audio_url,
+                file_path=url_to_local_path(audio_url),
+                filename=Path(audio_url).name,
+                mime_type="audio/mpeg",
+                meta=meta,
+            )
+    except Exception:
+        logger.warning("[assets] 一键成片资产落库失败 video=%s", video_url, exc_info=True)
+
+    return result
 
 
 @app.post("/api/generate", summary="生成短视频创作方案")

@@ -48,12 +48,28 @@ function Stop-ProcessByPort {
             $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
             if ($proc -and $proc.ProcessName -ne "Idle") {
                 Write-Host "  Kill port $Port : $($proc.ProcessName) (PID $procId)" -ForegroundColor Yellow
+                # kill the listener and its child tree (uvicorn workers / node dev server)
                 Stop-Process -Id $procId -Force -ErrorAction Stop
+                Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+                    Where-Object { $_.ParentProcessId -eq $procId } |
+                    ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
             }
         } catch {
             # ignore unavailable or protected processes
         }
     }
+}
+
+function Wait-PortListening {
+    param([int]$Port, [int]$TimeoutSec = 45)
+    $deadline = (Get-Date).AddSeconds($TimeoutSec)
+    while ((Get-Date) -lt $deadline) {
+        if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
+            return $true
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
 }
 
 if ($BackendPort -eq 0) {
@@ -64,8 +80,9 @@ if ($FrontendPort -eq 0) {
 }
 
 $frontendDir = Join-Path $projectDir "frontend"
+$viteJs = Join-Path $frontendDir "node_modules\vite\bin\vite.js"
 
-# ---------- 找 Python ----------
+# ---------- find Python ----------
 $pythonCmd = $null
 foreach ($cmd in @("python", "py", "python3")) {
     if (Get-Command $cmd -ErrorAction SilentlyContinue) {
@@ -79,27 +96,31 @@ if (-not $SkipBackend -and -not $pythonCmd) {
 }
 if ($pythonCmd) { Write-Host "Python: $pythonCmd" -ForegroundColor Gray }
 
-# ---------- 找 Node / npm ----------
+# ---------- find Node / npm ----------
 $nodeCmd = $null
 if (Get-Command "node" -ErrorAction SilentlyContinue) { $nodeCmd = "node" }
 
 $npmCmd = $null
-if (Get-Command "npm" -ErrorAction SilentlyContinue) {
-    $npmCmd = "npm"
+$npmResolved = Get-Command npm -ErrorAction SilentlyContinue
+if ($npmResolved -and $npmResolved.Source) {
+    $npmCmd = $npmResolved.Source
 } elseif ($nodeCmd) {
-    # npm.cmd 通常和 node.exe 在同一目录
     $nodeDir = Split-Path -Parent (Get-Command $nodeCmd).Source
     $npmExe = Join-Path $nodeDir "npm.cmd"
     if (Test-Path $npmExe) { $npmCmd = $npmExe }
+}
+if (-not $SkipFrontend -and -not $nodeCmd) {
+    Write-Error "node not found in PATH. Please install Node.js or use -SkipFrontend"
+    exit 1
 }
 if (-not $SkipFrontend -and -not $npmCmd) {
     Write-Error "npm not found in PATH. Please install Node.js or use -SkipFrontend"
     exit 1
 }
 if ($nodeCmd) { Write-Host "Node:   $nodeCmd" -ForegroundColor Gray }
-if ($npmCmd) { Write-Host "npm:    $npmCmd" -ForegroundColor Gray }
+if ($npmCmd)  { Write-Host "npm:    $npmCmd" -ForegroundColor Gray }
 
-# ---------- 检查 Python 依赖 ----------
+# ---------- check Python deps ----------
 if (-not $SkipBackend) {
     Write-Host "`n[1/4] Check Python deps..." -ForegroundColor Yellow
     $missing = @()
@@ -120,11 +141,10 @@ if (-not $SkipBackend) {
     }
 }
 
-# ---------- 检查前端依赖 ----------
+# ---------- check frontend deps ----------
 if (-not $SkipFrontend) {
     Write-Host "`n[2/4] Check frontend deps..." -ForegroundColor Yellow
-    $nodeModules = Join-Path $frontendDir "node_modules"
-    if (-not (Test-Path $nodeModules)) {
+    if (-not (Test-Path $viteJs)) {
         Write-Host "  Running npm install..." -ForegroundColor Yellow
         $installProc = Start-Process -FilePath $npmCmd -ArgumentList "install" `
             -WorkingDirectory $frontendDir -WindowStyle Normal -PassThru -Wait
@@ -137,53 +157,83 @@ if (-not $SkipFrontend) {
     }
 }
 
-# ---------- 清端口 ----------
+# ---------- clear ports ----------
 Write-Host "`n[3/4] Clear ports..." -ForegroundColor Yellow
-if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
+if (-not $SkipBackend)  { Stop-ProcessByPort -Port $BackendPort }
 if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
 Start-Sleep -Seconds 1
 
-# ---------- 启动后端 ----------
+# ---------- start backend ----------
 $backendProc = $null
 if (-not $SkipBackend) {
     Write-Host "`n[4/4] Start FastAPI on port $BackendPort ..." -ForegroundColor Yellow
-    $backendProc = Start-Process -FilePath $pythonCmd -ArgumentList "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload" -WorkingDirectory $projectDir -WindowStyle Normal -PassThru
-    Start-Sleep -Seconds 3
+    $backendProc = Start-Process -FilePath $pythonCmd `
+        -ArgumentList "-m uvicorn src.main:app --host 0.0.0.0 --port $BackendPort --reload" `
+        -WorkingDirectory $projectDir -WindowStyle Normal -PassThru
 }
 
-# ---------- 启动前端 ----------
+# ---------- start frontend ----------
+# Launch vite directly via node (avoids cmd.exe / npm.cmd indirection that can fail
+# silently in some environments). Equivalent to `npm run dev`.
 $frontendProc = $null
 if (-not $SkipFrontend) {
-    Write-Host "`n       Start Vite dev server on port $FrontendPort ..." -ForegroundColor Yellow
-    # npm 在 Windows 上是 cmd 脚本，用 cmd /c 调用更稳定
-    $frontendProc = Start-Process -FilePath "cmd.exe" -ArgumentList "/c npm run dev -- --port $FrontendPort" -WorkingDirectory $frontendDir -WindowStyle Normal -PassThru
-    Start-Sleep -Seconds 3
+    Write-Host "       Start Vite dev server on port $FrontendPort ..." -ForegroundColor Yellow
+    $frontendProc = Start-Process -FilePath $nodeCmd `
+        -ArgumentList "node_modules\vite\bin\vite.js","--port","$FrontendPort" `
+        -WorkingDirectory $frontendDir -WindowStyle Normal -PassThru
 }
 
-# ---------- 打印地址 ----------
+# ---------- wait for services to come up ----------
+Write-Host "`nWaiting for services..." -ForegroundColor Gray
+$backendOk = $true
+$frontendOk = $true
+if (-not $SkipBackend) {
+    $backendOk = Wait-PortListening -Port $BackendPort -TimeoutSec 45
+    if ($backendOk) {
+        Write-Host "  Backend  :$BackendPort ready" -ForegroundColor Green
+    } else {
+        Write-Host "  Backend  :$BackendPort NOT ready (see backend window)" -ForegroundColor Red
+    }
+}
+if (-not $SkipFrontend) {
+    $frontendOk = Wait-PortListening -Port $FrontendPort -TimeoutSec 45
+    if ($frontendOk) {
+        Write-Host "  Frontend :$FrontendPort ready" -ForegroundColor Green
+    } else {
+        Write-Host "  Frontend :$FrontendPort NOT ready (see frontend window)" -ForegroundColor Red
+    }
+}
+
+# ---------- print addresses ----------
 Write-Host "`n============================================" -ForegroundColor Green
 Write-Host "  OK!" -ForegroundColor Green
-if (-not $SkipFrontend) {
+if (-not $SkipFrontend -and $frontendOk) {
     Write-Host "  Frontend: http://localhost:$FrontendPort/" -ForegroundColor Green
 }
-if (-not $SkipBackend) {
+if (-not $SkipBackend -and $backendOk) {
     Write-Host "  API:      http://localhost:$BackendPort/" -ForegroundColor Green
     Write-Host "  API Docs: http://localhost:$BackendPort/docs" -ForegroundColor Green
     Write-Host "  Health:   http://localhost:$BackendPort/api/health" -ForegroundColor Green
+}
+if ((-not $frontendOk) -or (-not $backendOk)) {
+    Write-Host "  Some services failed. Check the spawned windows for errors." -ForegroundColor Red
 }
 Write-Host "============================================" -ForegroundColor Green
 Write-Host "`nPress any key to stop..." -ForegroundColor Gray
 
 $null = [System.Console]::ReadKey($true)
 
-# ---------- 停止 ----------
+# ---------- stop ----------
 Write-Host "`nStopping..." -ForegroundColor Yellow
+# Kill by port first — reliably gets the actual listener (node / uvicorn worker)
+# even when the spawned parent window has already reparented children.
+if (-not $SkipBackend)  { Stop-ProcessByPort -Port $BackendPort }
+if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
+# Fallback: kill the spawned parent processes.
 if ($backendProc -and -not $backendProc.HasExited) {
     Stop-Process -Id $backendProc.Id -Force -ErrorAction SilentlyContinue
 }
 if ($frontendProc -and -not $frontendProc.HasExited) {
     Stop-Process -Id $frontendProc.Id -Force -ErrorAction SilentlyContinue
 }
-if (-not $SkipBackend) { Stop-ProcessByPort -Port $BackendPort }
-if (-not $SkipFrontend) { Stop-ProcessByPort -Port $FrontendPort }
 Write-Host "Done." -ForegroundColor Green

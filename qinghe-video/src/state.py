@@ -21,6 +21,9 @@ class QingheState(TypedDict, total=False):
     target_duration: str
     additional_info: str
 
+    # ---------- 用户选定的选题 ----------
+    selected_topic: dict
+
     # ---------- 各 Agent 输出 ----------
     planner_output: dict
     copywriter_output: dict

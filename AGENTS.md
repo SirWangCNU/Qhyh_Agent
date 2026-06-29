@@ -2,74 +2,135 @@
 
 ## Project overview
 
-LangGraph multi-agent pipeline for agricultural short-video creation. 5 AI agents run sequentially: planner → copywriter → scriptwriter → visual_designer → distributor → report_generator. Any node writing `error` to state skips remaining nodes and jumps to report generation.
+LangGraph multi-agent pipeline for agricultural short-video creation. The core pipeline runs 5 AI agents sequentially: planner → copywriter → scriptwriter → visual_designer → distributor → report_generator. Any node writing `error` to state skips remaining nodes and jumps to report generation.
+
+Around the pipeline, the backend now also exposes: JWT auth + SQLite persistence, single-step Agent execution (workshop), AI text polish, doubao-seedream image generation, edge-tts voiceover, moviepy video composition, one-click MVP video (`video_mvp`), and a nine-grid "director board" image studio.
+
+The frontend is a React + TypeScript + Vite SPA (React Router, zustand, react-query, Tailwind, shadcn/ui). The old static HTML frontend is archived under `frontend/_legacy-html/` and the Streamlit app has been removed.
 
 ## Structure
 
-All source code lives in `qinghe-video/`. The repo root has only `run.ps1` (PowerShell launcher) and `langgraph-qinghe-prompts.md` (design doc, not code).
+All source code lives in `qinghe-video/`. The repo root has `run.ps1` (PowerShell launcher, starts both backend and frontend) and `docs/design/prompts.md` (design doc, not code).
 
 ```
 qinghe-video/
-├── src/                    # FastAPI backend + LangGraph pipeline
-│   ├── main.py             # FastAPI entrypoint
-│   ├── graph.py            # LangGraph StateGraph definition
-│   ├── state.py            # QingheState TypedDict (shared state)
-│   ├── models.py           # Pydantic v2 output models for all agents
-│   ├── config.py           # pydantic-settings from .env
-│   ├── nodes/              # Agent node functions
-│   │   ├── llm.py          # ChatOpenAI factory (get_llm)
+├── src/                         # FastAPI backend + LangGraph pipeline
+│   ├── main.py                  # FastAPI entrypoint, all HTTP routes
+│   ├── graph.py                 # LangGraph StateGraph definition (module-level singleton app_graph)
+│   ├── state.py                 # QingheState TypedDict (shared state)
+│   ├── models.py                # Pydantic v2 output models for all agents + UserInput
+│   ├── config.py                # pydantic-settings from .env; get_prompt / get_system_prompt
+│   ├── agent_steps.py           # Single-step Agent execution (POST /api/agents/{step})
+│   ├── text_polish.py           # AI one-liner → full UserInput expansion (prompts/polish.txt)
+│   ├── image_generation.py      # doubao-seedream image gen via OpenAI-compatible gateway (httpx)
+│   ├── video_generation.py      # Video gen API shape (preview only, protocol not wired)
+│   ├── tts_service.py           # edge-tts voiceover synthesis
+│   ├── video_compose.py         # moviepy + Pillow: 9:16 vertical mp4 from images + audio
+│   ├── video_mvp.py             # One-click: shot prompts → image gen → TTS → video compose
+│   ├── auth/                    # JWT auth (router, dependencies, security, schemas)
+│   ├── db/                      # SQLAlchemy + SQLite (database.py, models.py User)
+│   ├── image_studio/            # Nine-grid director board (router, prompt_builder, image_variants, grid_composer)
+│   ├── nodes/                   # Agent node functions
+│   │   ├── llm.py               # ChatOpenAI factory (get_llm)
 │   │   ├── planner.py, copywriter.py, scriptwriter.py, visual_designer.py, distributor.py
 │   │   └── report_generator.py  # Pure Python (no LLM call)
-│   └── prompts/            # System prompt .txt files (one per agent)
-├── frontend/
-│   ├── app.py              # Streamlit frontend
-│   ├── index.html          # Static HTML frontend (served by FastAPI at /)
-│   └── assets/             # CSS/JS for static frontend
-├── tests/test_graph.py     # Unit tests (no LLM calls)
-└── pyproject.toml
+│   ├── utils/json_parser.py     # JSON parsing helpers
+│   └── prompts/                 # System prompt files (.txt per agent; polish.txt; image_studio_director_board.md)
+├── alembic/                     # DB migrations (001_create_users_table seeds default admin)
+├── alembic.ini
+├── frontend/                    # React + TS + Vite SPA
+│   ├── src/
+│   │   ├── components/          # layout, pipeline, workshop, agent, ui (shadcn), shared, home, auth
+│   │   ├── pages/               # CreatePage, ChatPage, WorkshopPage, ImageStudioPage, AgentsPage, PlanPage
+│   │   ├── routes/index.tsx     # createHashRouter (URL-compatible with old #/create etc.)
+│   │   ├── stores/              # zustand: auth-store, pipeline-store, ui-store, workshop-store
+│   │   ├── hooks/               # use-agents, use-auth, use-generate-stream, use-media, use-plans, ...
+│   │   ├── lib/                 # api.ts, sse.ts, constants.ts, utils.ts
+│   │   └── types/               # api.ts, index.ts
+│   ├── _legacy-html/            # Archived old static HTML frontend (not served)
+│   ├── index.html, package.json, vite.config.ts, tailwind.config.ts, tsconfig.json
+│   └── dist/                    # (generated by `npm run build`) FastAPI serves this at / in production
+├── tests/
+│   ├── test_graph.py            # Unit tests (models, state, graph build, prompt loading) — no LLM key
+│   └── test_auth.py             # Auth tests (password hash, JWT, register/login/me) — in-memory SQLite
+├── outputs/                     # Generated audio/ + video/ (served at /outputs)
+├── libs/                        # Vendored copy of pip deps (aiohttp, edge_tts, yarl, ...) — not on sys.path by default; backup only
+├── qinghe.db                    # SQLite database file (gitignored)
+├── pyproject.toml
+├── .env.example
+└── README.md
 ```
 
 ## Commands
 
-All commands run from `qinghe-video/` directory:
+Backend commands run from `qinghe-video/`:
 
 ```bash
 cd qinghe-video
 
-# Install
+# Install backend (includes fastapi, langgraph, sqlalchemy, alembic, edge-tts, moviepy, Pillow, bcrypt, python-jose)
 pip install -e .
-pip install -e ".[dev]"     # includes pytest
+pip install -e ".[dev]"     # adds pytest, pytest-asyncio
 
-# Run backend (port 18739, default)
+# Run backend only (port 18739, default)
 uvicorn src.main:app --host 0.0.0.0 --port 18739 --reload
 
-# Run Streamlit frontend (port 18510, optional — static HTML also works)
-streamlit run frontend/app.py --server.port 18510
-
-# Tests (no LLM key needed — tests only validate models, state, graph build, prompt loading)
+# Tests (no LLM key needed — validate models, state, graph build, prompt loading, auth/JWT/ORM)
 pytest tests/ -v
 
-# PowerShell one-click (Windows, from repo root)
-.\run.ps1                   # starts FastAPI only, serves static frontend at /
-.\qinghe-video\start.ps1    # same behavior
+# DB migration (initial migration creates users table + seeds admin from env vars)
+alembic upgrade head
 ```
+
+Frontend commands run from `qinghe-video/frontend/`:
+
+```bash
+cd qinghe-video/frontend
+npm install
+npm run dev        # Vite dev server on :5173 (proxies /api and /outputs to :18739)
+npm run build      # tsc -b && vite build → frontend/dist/ (FastAPI serves this at / in prod)
+npm run lint
+```
+
+PowerShell one-click (Windows, from repo root) — starts **both** backend and Vite dev server:
+
+```powershell
+.\run.ps1                                # backend :18739 + frontend :5173
+.\run.ps1 -SkipFrontend                  # backend only
+.\run.ps1 -SkipBackend                   # frontend only
+.\run.ps1 -BackendPort 8000 -FrontendPort 3000   # custom ports
+```
+
+`run.ps1` auto-installs missing Python/npm deps, clears the ports, and prints the URLs. Press any key to stop both processes.
 
 ## Environment
 
-Copy `.env.example` to `.env` in `qinghe-video/`. **`LLM_API_KEY` is required** — the app will start without it but every pipeline call will fail.
+Copy `.env.example` to `.env` in `qinghe-video/`. **`LLM_API_KEY` is required** for the pipeline; `AIAPIAL_API_KEY` is required for image generation; `JWT_SECRET` must be changed from the default in production.
 
-Key vars: `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`, `APP_PORT` (default 18739).
-
-Switch providers by changing `LLM_MODEL` + `LLM_BASE_URL` (DeepSeek, Qwen, etc. all use OpenAI-compatible API).
+Key vars:
+- **LLM**: `LLM_MODEL`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_TEMPERATURE`, `LLM_MAX_TOKENS`. Switch providers by changing `LLM_MODEL` + `LLM_BASE_URL` (DeepSeek, Qwen, etc. all use OpenAI-compatible API).
+- **App**: `APP_HOST`, `APP_PORT` (default 18739), `LOG_LEVEL`.
+- **Image gen** (OpenAI-compatible gateway): `APILINK_API_BASE_URL`, `AIAPIAL_API_KEY`, `IMAGE_MODEL` (default `doubao-seedream-5-0-260128`), `IMAGE_SIZE` (default `1920x1920` — seedream 5 requires ≥3686400 pixels), `IMAGE_RESPONSE_FORMAT`, `VIDEO_MODEL`, `VIDEO_SIZE`.
+- **Image studio**: `IMAGE_STUDIO_CELL_SIZE`, `IMAGE_STUDIO_GRID_GAP`, `IMAGE_STUDIO_LABEL_HEIGHT`.
+- **TTS**: `tts_voice` (default `zh-CN-XiaoxiaoNeural`), `tts_rate`, `tts_volume`.
+- **Video compose**: `video_fps` (30), `video_resolution` (`1080x1920`), `video_per_image_duration` (3.5s).
+- **Auth & DB**: `SQLITE_PATH` (default `qinghe.db`), `JWT_SECRET`, `JWT_ALGORITHM` (HS256), `JWT_EXPIRE_MINUTES` (1440 = 24h), `ADMIN_USERNAME`, `ADMIN_PASSWORD` (used by alembic migration to seed admin).
 
 ## Architecture quirks
 
 - **Prompt escaping**: `config.get_system_prompt()` escapes `{` → `{{` and `}` → `}}` because LangChain's `ChatPromptTemplate` interprets braces as f-string variables. System prompts contain JSON examples with braces. If you add a new prompt file with intentional template variables, this function will break them — use `get_prompt()` directly instead.
-- **Module-level graph singleton**: `src/graph.py` compiles the graph at import time (`app_graph = build_graph()`). The `get_system_prompt()` calls in each node module also run at import time. Changes to `.txt` prompt files require a server restart.
-- **Two frontends**: FastAPI serves `frontend/index.html` as a static SPA at `/`. Streamlit (`frontend/app.py`) is a separate app that calls the same backend API. Both work independently.
-- **SSE streaming**: `POST /api/generate/stream` returns Server-Sent Events. The static HTML frontend uses this endpoint. The Streamlit frontend also uses it.
-- **No persistence**: MVP has no checkpoint, database, or task queue. All calls are synchronous and in-memory.
-- **`json_repair` dependency**: Listed in pyproject.toml but not currently imported in source — may be used by LLM output parsing in langchain internals or reserved for future use.
+- **Module-level graph singleton**: `src/graph.py` compiles the graph at import time (`app_graph = build_graph()`). The `get_system_prompt()` calls in each node module (and in `text_polish.py`) also run at import time. Changes to `.txt` prompt files require a server restart.
+- **JWT auth on all business endpoints**: Every route except `GET /api/health` and the SPA routes uses `Depends(get_current_user)`. `OAuth2PasswordBearer(tokenUrl="/api/auth/login")`. The frontend `auth-store` (zustand) persists the token and injects `Authorization: Bearer <token>` via `lib/api.ts`. Unauthenticated calls to protected endpoints return 401.
+- **SQLite + Alembic**: `src/db/database.py` creates a module-level engine against `qinghe.db` (file path from `SQLITE_PATH`). The initial alembic migration `001_create_users_table` creates the `users` table and seeds the admin row from `ADMIN_USERNAME` / `ADMIN_PASSWORD` env vars (reads env directly, not `.env`, at migration time). Tables are also created lazily via `Base.metadata` in tests.
+- **React SPA serving**: In production, `npm run build` outputs `frontend/dist/`. FastAPI mounts `/assets` and serves `index.html` at `/` and at SPA routes (`/chat`, `/plan`, `/agents`, `/create`, `/workshop`, `/image-studio`) so React Router can take over. If `dist/` is missing, `/` returns 404 with build instructions. In dev, Vite serves the frontend on :5173 and proxies `/api` + `/outputs` to the FastAPI backend (see `vite.config.ts`).
+- **Hash routing**: `routes/index.tsx` uses `createHashRouter` to keep URLs (`/#/create` etc.) compatible with the legacy static HTML frontend.
+- **Static outputs**: `outputs/audio/` and `outputs/video/` are created at startup and mounted at `/outputs`. TTS and video compose endpoints return `audio_url` / `video_url` pointing there.
+- **SSE streaming**: `POST /api/generate/stream` returns Server-Sent Events (`start`, `node_start`, `node_update`, `error`, `complete`). The frontend consumes it via `hooks/use-generate-stream.ts` and `lib/sse.ts`.
+- **Single-step Agent execution**: `POST /api/agents/{step}` (`agent_steps.py`) runs one node in isolation, merging `request.state` with `request.input`, and returns the updated full state. This powers the workshop UI where users run agents step-by-step.
+- **One-click video (`video_mvp`)**: `POST /api/video/mvp` extracts `visual_output.shot_prompts` and copywriter voiceover text from a workshop state, generates one image per shot, synthesizes TTS, and composes a 9:16 mp4. Image gen is async (httpx); TTS + moviepy compose are blocking.
+- **Image studio is standalone**: `src/image_studio/` is a self-contained module (not part of LangGraph). It uploads a reference image, asks the LLM for 9 style-variant prompts, runs concurrent image-to-image generation with the reference for consistency, and composes a 3×3 grid with Pillow.
+- **`libs/` directory**: A vendored copy of some pip dependencies (aiohttp, edge_tts, yarl, multidict, ...). It is **not** added to `sys.path` by the app; normal pip-installed packages are used. Treat it as a backup/cache, not an import source.
+- **`json_repair` dependency**: Listed in pyproject.toml; used for robust LLM JSON output parsing.
 
 ## Coding standards
 
@@ -77,41 +138,18 @@ Switch providers by changing `LLM_MODEL` + `LLM_BASE_URL` (DeepSeek, Qwen, etc. 
 - **Think step by step**: before writing code, briefly outline the approach in comments or prose, then implement.
 - **Output convention**: when adding a new module, include a usage example or simple test case alongside the implementation.
 
-## Known bug: pipeline state lost on page navigation (static HTML frontend)
-
-**Symptom**: When a user clicks nav links (#create / #pipeline / #result) or navigates to `/docs` and back during an active generation, the pipeline progress UI resets — active/done/error node badges vanish.
-
-**Root cause**: `app.js:startGenerate()` stores all runtime state in local closure variables (`completedNodes`, `currentNode`, `errorNode`, `taskId`, `finalResult`). These are garbage-collected when the function scope is exited or the page reloads. There is no persistence layer.
-
-**Fix direction** (not yet implemented):
-
-1. Extract a new `state.js` module that manages pipeline state via `sessionStorage`:
-   ```
-   frontend/assets/js/state.js   # NEW — reads/writes sessionStorage under key "qinghe_pipeline_state"
-   ```
-2. In `app.js`, replace the local variables with calls to `Q.state.get()` / `Q.state.set()`.
-3. On page load (`app.js` init), call `Q.state.restore()` to replay saved node states back into the DOM via `pipeline.setNodeState()`.
-4. On SSE `node_update` / `error` / `complete` events, persist the new state immediately.
-5. Add `state.js` as a `<script>` in `index.html` before `app.js`.
-
-**State schema** to persist:
-```json
-{
-  "taskId": "a1b2c3d4e5f6",
-  "completedNodes": { "planner": true, "copywriter": true },
-  "activeNode": "scriptwriter",
-  "errorNode": null,
-  "errorMsg": null,
-  "finalResult": null
-}
-```
-
 ## Pydantic models
 
 All agent output models use `ConfigDict(extra="forbid")` — adding extra fields to any output will raise `ValidationError`. The test `test_planner_output_model_forbids_extra` verifies this.
 
 Field names in `models.py` **must match** the JSON keys in the corresponding `prompts/*.txt` system prompt files exactly, because `with_structured_output()` maps LLM JSON output to the Pydantic model by field name.
 
+`PolishResult` (in `text_polish.py`) mirrors `UserInput` so the polished output can be fed directly back into the planner.
+
 ## Testing
 
-Tests in `tests/test_graph.py` are pure unit tests — they validate model construction, state fields, graph compilation, and prompt file loading. No LLM API key is needed. No integration tests exist yet.
+Tests in `tests/` are pure unit tests — no LLM API key is needed:
+- `test_graph.py`: model construction, state fields, graph compilation, prompt file loading.
+- `test_auth.py`: password hashing/verification, JWT encode/decode, User ORM, and the `/api/auth/*` endpoints. It overrides `get_db` with an in-memory SQLite (`StaticPool`) and recreates tables per test. It also asserts that protected endpoints (e.g. `POST /api/generate`) return 401 without a token.
+
+No integration tests exist yet for image gen / TTS / video compose / image studio (these require external API keys or system deps).

@@ -1,24 +1,25 @@
-import { Play, Loader2, RotateCcw, ChevronRight } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRunAgentStep } from "@/hooks/use-agents";
 import { useTextPolish } from "@/hooks/use-text-polish";
+import { useTopicGeneration } from "@/hooks/use-topic-generation";
 import { useGenerateImage, useGenerateTTS, useComposeVideo } from "@/hooks/use-media";
 import {
   WORKSHOP_STEPS,
+  DEFAULT_AUTO_RUN_TO,
   type WorkshopStepKey,
   type WorkshopStepConfig,
   type NodeKey,
 } from "@/lib/constants";
 import { useWorkshopStore } from "@/stores/workshop-store";
 import { WorkshopStepList } from "@/components/workshop/WorkshopStepList";
-import { WorkshopProgressBar } from "@/components/workshop/WorkshopProgressBar";
 import type { CopywriterOutput } from "@/types/api";
 
 /**
  * 分步 Agent 工坊（#/workshop）— Auto Video Agent 模式。
  *
  * Step1 极简输入嵌入 Step 1 卡片：产品名 + 一句话创意 → AI 润写 → 完整字段。
- * 8 步流水线以卡片网格平铺：策划→文案→脚本→视觉→投放→出图→配音→合成
+ * 9 步流水线以卡片网格平铺：策划→文案→一致性生图→脚本→视觉→投放→出图→配音→合成
  * 支持复选框自动批量执行 + 手动单步「运行此步」续跑。
  */
 export function WorkshopPage() {
@@ -27,6 +28,7 @@ export function WorkshopPage() {
   // API hooks
   const runAgentStep = useRunAgentStep();
   const textPolish = useTextPolish();
+  const topicGeneration = useTopicGeneration();
   const generateImage = useGenerateImage();
   const generateTTS = useGenerateTTS();
   const composeVideo = useComposeVideo();
@@ -35,29 +37,67 @@ export function WorkshopPage() {
   function validateForm(): string | null {
     const f = store.form;
     if (!f.product_name.trim()) return "请填写产品名称";
-    if (!store.oneLiner.trim() && !f.selling_points.trim()) {
-      return "请填写一句话创意或先点击 AI 润写";
+    if (!store.oneLiner.trim()) {
+      store.setOneLiner("为该产品制作一个吸引人的农业短视频");
     }
-    // 润写后仍需 selling_points（planner 依赖）
-    if (!f.selling_points.trim()) return "请先点击 AI 润写补全信息";
+    if (store.selectedTopicIndex === null) return "请先点击 AI 选题并选择一个爆款主题";
+    if (!f.selling_points.trim()) return "选题后正在自动补全创作信息，请稍候...";
     return null;
   }
 
-  /** 触发 AI 润写 */
+  /** 后台自动补全表单（选定主题后静默调用，不暴露按钮） */
   async function handlePolish(): Promise<void> {
     if (!store.form.product_name.trim()) {
       alert("请先填写产品名称");
       throw new Error("请先填写产品名称");
     }
+    const oneLiner = store.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
     if (!store.oneLiner.trim()) {
-      alert("请填写一句话创意");
-      throw new Error("请填写一句话创意");
+      store.setOneLiner(oneLiner);
     }
     const resp = await textPolish.mutateAsync({
       product_name: store.form.product_name,
-      one_liner: store.oneLiner,
+      one_liner: oneLiner,
     });
     store.setForm(resp.input);
+  }
+
+  /** 触发 AI 选题：生成多个爆款候选主题 */
+  async function handleGenerateTopics(): Promise<void> {
+    if (!store.form.product_name.trim()) {
+      alert("请先填写产品名称");
+      return;
+    }
+    const oneLiner = store.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
+    if (!store.oneLiner.trim()) {
+      store.setOneLiner(oneLiner);
+    }
+    try {
+      const resp = await topicGeneration.mutateAsync({
+        product_name: store.form.product_name,
+        one_liner: oneLiner,
+        target_platform: store.form.target_platform,
+      });
+      store.setTopics(resp.topics);
+      store.setSelectedTopicIndex(null);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      alert(`选题失败：${msg}`);
+    }
+  }
+
+  /** 选定主题：回填 oneLiner 并自动触发润写补全表单 */
+  async function handleSelectTopic(index: number): Promise<void> {
+    const topic = store.topics[index];
+    if (!topic) return;
+    store.setSelectedTopicIndex(index);
+    store.setOneLiner(topic.theme);
+    // 选定后自动润写，形成 选题→润写→表单→planner 顺畅流
+    try {
+      await handlePolish();
+    } catch {
+      /* handlePolish 内部已 alert */
+    }
   }
 
   /** 校验前置依赖步骤是否完成 */
@@ -113,7 +153,11 @@ export function WorkshopPage() {
           await execLLMStep(key);
           break;
         case "image":
-          await execImageGen();
+          if (key === "consistency_images") {
+            await execConsistencyImages();
+          } else {
+            await execImageGen();
+          }
           break;
         case "tts":
           await execTTS();
@@ -139,12 +183,27 @@ export function WorkshopPage() {
       step: key as NodeKey,
       input: store.form,
       state: store.workshopState,
+      selected_topic: store.selectedTopic,
     });
     if (resp.status === "error") {
       throw new Error(resp.error ?? `${key} 执行失败`);
     }
     store.setStepOutput(key, resp.output);
     store.setWorkshopState(resp.state);
+
+    // 文案步骤完成后，把生成的一致性规划同步写入一致性参考，供 visual_designer 注入
+    if (key === "copywriter") {
+      const plan = resp.state?.copywriter_output?.consistency_plan;
+      if (plan?.character_subject) {
+        store.setConsistencyReferences("character", plan.character_subject);
+      }
+      if (plan?.object_subject) {
+        store.setConsistencyReferences("object", plan.object_subject);
+      }
+      if (plan?.scene_subject) {
+        store.setConsistencyReferences("scene", plan.scene_subject);
+      }
+    }
   }
 
   /** 出图：逐镜生成图片 */
@@ -154,6 +213,11 @@ export function WorkshopPage() {
       throw new Error("视觉 Agent 未生成 shot_prompts");
     }
     const prompts = shotPrompts.slice(0, 4);
+
+    // B1 联动：开启且第 3 步已生成人物参考图时，透传给后端走图生图
+    const characterRefUrl = store.imageGenUseCharacterRef
+      ? store.mediaResults.characterImage?.url ?? null
+      : null;
 
     // 初始化为 loading
     const initial: Array<{ url: string; prompt: string; status: "loading" | "done" | "error" }> =
@@ -172,6 +236,7 @@ export function WorkshopPage() {
           negative_prompt: prompts[i].negative_prompt,
           size: "1920x1920",
           n: 1,
+          ...(characterRefUrl ? { reference_image_path: characterRefUrl } : {}),
         });
         results[i] = {
           url: resp.images[0]?.url ?? "",
@@ -185,6 +250,26 @@ export function WorkshopPage() {
     }
 
     store.setStepOutput("image_gen", { count: results.length, images: results });
+  }
+
+  /**
+   * 一致性生图：实际生成在子卡片中独立完成（主体描述/参考图由用户在面板输入）。
+   * 此函数仅校验是否至少一类已生成；若全部为空，提示用户去面板操作。
+   */
+  async function execConsistencyImages() {
+    const m = store.mediaResults;
+    const anyDone =
+      m.characterImage?.status === "done" ||
+      m.objectImage?.status === "done" ||
+      m.sceneImage?.status === "done";
+    if (!anyDone) {
+      throw new Error("请在下方卡片中填写主体描述（必填）并点击「生成」；可选择性上传参考图走图生图。");
+    }
+    store.setStepOutput("consistency_images", {
+      character: m.characterImage?.url ?? null,
+      object: m.objectImage?.url ?? null,
+      scene: m.sceneImage?.url ?? null,
+    });
   }
 
   /** 配音：TTS 合成 */
@@ -232,7 +317,7 @@ export function WorkshopPage() {
     }
   }
 
-  /** 自动执行：从第一个未完成步骤执行到 autoRunToStep */
+  /** 自动执行：从第一个未完成步骤执行到第 5 步（视觉/投放之后，出图/配音/合成手动触发） */
   async function startAutoRun() {
     const formError = validateForm();
     if (formError) {
@@ -242,8 +327,10 @@ export function WorkshopPage() {
     store.setAutoRunning(true);
     try {
       for (const cfg of WORKSHOP_STEPS) {
-        if (cfg.num > store.autoRunToStep) break;
+        if (cfg.num > DEFAULT_AUTO_RUN_TO) break;
         if (store.steps[cfg.key] === "done") continue;
+        // 一致性生图需要用户主动输入主体描述/上传参考图，自动流跳过
+        if (cfg.key === "consistency_images") continue;
         const ok = await executeStep(cfg.key);
         if (!ok) break; // 失败则暂停
       }
@@ -252,119 +339,51 @@ export function WorkshopPage() {
     }
   }
 
-  /** 手动下一步：执行下一个未完成步骤 */
-  async function runNextStep() {
-    const next = WORKSHOP_STEPS.find(
-      (s) => store.steps[s.key] !== "done" && store.steps[s.key] !== "running",
-    );
-    if (next) {
-      await executeStep(next.key);
-    }
-  }
-
   /** 重试失败步骤 */
   async function retryStep(key: WorkshopStepKey) {
     await executeStep(key);
   }
 
-  /** 判断是否所有步骤完成 */
-  const allDone = WORKSHOP_STEPS.every((s) => store.steps[s.key] === "done");
-  /** 判断是否有步骤失败 */
-  const hasError = WORKSHOP_STEPS.some((s) => store.steps[s.key] === "error");
-  /** 是否有未完成步骤（用于显示「下一步」按钮） */
-  const hasNext = WORKSHOP_STEPS.some(
-    (s) => store.steps[s.key] !== "done" && store.steps[s.key] !== "running",
-  );
-
   return (
     <section className="container-app py-10">
       <div className="module__head">
-        <span className="eyebrow">
-          <span className="num">04</span>
-          分步 Agent 工坊
-        </span>
-        <h2 className="section-title">把创作拆成八道农事工序</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <span className="eyebrow">
+              <span className="num">04</span>
+              分步 Agent 工坊
+            </span>
+            <h2 className="section-title">把创作拆成九道农事工序</h2>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              if (confirm("确定重置所有步骤？")) store.reset();
+            }}
+            disabled={store.isStepRunning}
+          >
+            <RotateCcw size={14} /> 重置
+          </Button>
+        </div>
         <p className="section-desc">
-          勾选自动执行到哪一步，系统按顺序自动跑完；后续出图、配音、合成可手动逐步触发。
+          选题确认后点击开始执行，系统自动跑完前 5 步；后续出图、配音、合成可手动逐步触发。
         </p>
       </div>
 
       <div className="mt-8 space-y-5">
-        {/* 顶部控制栏：进度条 + 全局操作 */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="flex-1">
-              <WorkshopProgressBar
-                steps={store.steps}
-                isAutoRunning={store.isAutoRunning}
-                currentStep={store.currentStep}
-              />
-            </div>
-
-            <div className="flex shrink-0 items-center gap-2">
-              {/* 开始执行 / 继续自动执行 */}
-              {!allDone && !hasError && (
-                <Button
-                  onClick={() => void startAutoRun()}
-                  disabled={store.isStepRunning}
-                  size="sm"
-                >
-                  {store.isStepRunning ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" /> 执行中
-                    </>
-                  ) : (
-                    <>
-                      <Play size={14} /> 开始执行
-                    </>
-                  )}
-                </Button>
-              )}
-
-              {/* 下一步（有未完成步骤时显示） */}
-              {hasNext && !store.isStepRunning && (
-                <Button
-                  onClick={() => void runNextStep()}
-                  variant="outline"
-                  size="sm"
-                >
-                  <ChevronRight size={14} /> 下一步
-                </Button>
-              )}
-
-              {/* 全部完成提示 */}
-              {allDone && (
-                <span className="text-sm font-medium text-success">
-                  全部完成
-                </span>
-              )}
-
-              {/* 重置 */}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  if (confirm("确定重置所有步骤？")) store.reset();
-                }}
-                disabled={store.isStepRunning}
-              >
-                <RotateCcw size={14} /> 重置
-              </Button>
-            </div>
-          </div>
-        </div>
-
         {/* 步骤卡片网格 */}
         <WorkshopStepList
           steps={store.steps}
-          autoRunToStep={store.autoRunToStep}
           currentStep={store.currentStep}
-          onToggleAutoRun={(step) => store.setAutoRunToStep(step)}
           onStepClick={(key) => store.setCurrentStep(key)}
           onRetry={retryStep}
           onRun={executeStep}
-          onPolish={handlePolish}
-          isPolishing={textPolish.isPending}
+          onStartAutoRun={() => void startAutoRun()}
+          isApplying={textPolish.isPending}
+          onGenerateTopics={handleGenerateTopics}
+          onSelectTopic={handleSelectTopic}
+          isGeneratingTopics={topicGeneration.isPending}
           disabled={store.isStepRunning}
         />
       </div>

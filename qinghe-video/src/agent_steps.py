@@ -32,6 +32,7 @@ class AgentStepRequest(BaseModel):
 
     input: UserInput
     state: dict[str, Any] = Field(default_factory=dict)
+    selected_topic: dict[str, Any] | None = Field(default=None, description="用户选定的爆款选题")
 
 
 STEP_OUTPUT_KEY: dict[str, str] = {
@@ -77,6 +78,8 @@ def build_step_state(request: AgentStepRequest) -> dict[str, Any]:
             "additional_info": payload.additional_info or "",
         }
     )
+    if request.selected_topic is not None:
+        state["selected_topic"] = request.selected_topic
     state.pop("error", None)
     return state
 

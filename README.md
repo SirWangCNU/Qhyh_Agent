@@ -21,6 +21,15 @@
 
 ---
 
+## 文档入口
+
+- 📋 [产品需求文档 (PRD)](./docs/prd.md)
+- 🔌 [API 接口文档](./docs/api/endpoints.md)
+- 🎨 [提示词与设计文档](./docs/design/prompts.md)
+- 🤖 [AI Agent 开发规范](./AGENTS.md)
+
+---
+
 ## 技术栈
 
 | 层 | 技术 |
@@ -50,8 +59,11 @@ Qhyh_Agent/
 ├── README.md                   # 本文件
 ├── AGENTS.md                   # AI Agent 开发规范
 ├── run.ps1                     # PowerShell 一键启动（后端 + 前端）
-├── langgraph-qinghe-prompts.md # 设计文档
-├── 农业广告视频MVP迁移方案.md    # 迁移方案
+├── docs/                        # 项目文档目录
+│   ├── prd.md                  # 产品需求文档
+│   ├── api/endpoints.md        # API 接口文档
+│   ├── design/prompts.md       # 提示词与设计文档
+│   └── images/                 # 图片资料
 │
 └── qinghe-video/               # 主项目目录
     ├── README.md               # 项目详细文档

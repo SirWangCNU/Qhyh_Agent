@@ -1,23 +1,24 @@
-import { useState } from "react";
-import { Loader2, Check, AlertCircle, RotateCcw, Play, Sparkles, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Check, AlertCircle, RotateCcw, Play, Sparkles } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import type { WorkshopStepConfig, WorkshopStepKey } from "@/lib/constants";
 import { useWorkshopStore, type WorkshopStepStatus } from "@/stores/workshop-store";
 import { WorkshopStepContent } from "./WorkshopStepDetail";
+import { TopicCandidateGrid } from "./TopicCandidateGrid";
 
 interface WorkshopStepCardProps {
   cfg: WorkshopStepConfig;
-  onToggleAutoRun: (num: number) => void;
   onStepClick: (key: WorkshopStepKey) => void;
   onRun: (key: WorkshopStepKey) => void;
   onRetry: (key: WorkshopStepKey) => void;
-  onPolish: () => Promise<void>;
-  isPolishing: boolean;
+  onStartAutoRun: () => void;
+  isApplying: boolean;
+  onGenerateTopics: () => Promise<void>;
+  onSelectTopic: (index: number) => Promise<void>;
+  isGeneratingTopics: boolean;
 }
 
 /**
@@ -25,21 +26,22 @@ interface WorkshopStepCardProps {
  *
  * - Header：步骤指示器 + 序号/标题/kicker + 状态徽章
  * - Body：输入表单（Step 1）或步骤输出内容
- * - Footer：自动执行复选框 + 单步操作按钮
+ * - Footer：前置依赖提示 + 单步操作按钮
  */
 export function WorkshopStepCard({
   cfg,
-  onToggleAutoRun,
   onStepClick,
   onRun,
   onRetry,
-  onPolish,
-  isPolishing,
+  onStartAutoRun,
+  isApplying,
+  onGenerateTopics,
+  onSelectTopic,
+  isGeneratingTopics,
 }: WorkshopStepCardProps) {
   const store = useWorkshopStore();
   const status = store.steps[cfg.key] ?? "pending";
   const isCurrent = store.currentStep === cfg.key;
-  const isChecked = store.autoRunToStep >= cfg.num;
   const output = store.stepOutputs[cfg.key];
   const errorMsg = store.stepErrors[cfg.key];
   const isRunning = store.isStepRunning;
@@ -101,8 +103,11 @@ export function WorkshopStepCard({
       <div className="flex-1">
         {cfg.key === "planner" ? (
           <PlannerCardBody
-            isPolishing={isPolishing}
-            onPolish={onPolish}
+            isApplying={isApplying}
+            isGeneratingTopics={isGeneratingTopics}
+            onGenerateTopics={onGenerateTopics}
+            onSelectTopic={onSelectTopic}
+            onStartAutoRun={onStartAutoRun}
           />
         ) : (
           <WorkshopStepContent
@@ -117,28 +122,13 @@ export function WorkshopStepCard({
 
       {/* Footer */}
       <div className="mt-4 flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-soft hover:text-ink">
-          <input
-            type="checkbox"
-            checked={isChecked}
-            onChange={(e) => {
-              e.stopPropagation();
-              onToggleAutoRun(cfg.num);
-            }}
-            disabled={isRunning}
-            className="h-3.5 w-3.5 rounded border-border accent-primary"
-            aria-label={`自动执行到第${cfg.num}步`}
-          />
-          自动执行到此步
-        </label>
+        <div className="text-xs text-ink-faint">
+          {!depsSatisfied && status !== "done" && (
+            <span className="hidden sm:inline">需先完成前置步骤</span>
+          )}
+        </div>
 
         <div className="flex items-center gap-2">
-          {!depsSatisfied && status !== "done" && (
-            <span className="hidden text-xs text-ink-faint sm:inline">
-              需先完成前置步骤
-            </span>
-          )}
-
           {status === "running" && (
             <span className="inline-flex items-center gap-1 text-xs text-primary">
               <Loader2 size={12} className="animate-spin" /> 执行中
@@ -237,188 +227,105 @@ function isDone(status: WorkshopStepStatus) {
   return status === "done";
 }
 
-/** Step 1 策划卡片内容：创意输入 + AI 润写 + 详情表单 */
+/** Step 1 策划卡片内容：产品输入 + AI 选题 */
 function PlannerCardBody({
-  isPolishing,
-  onPolish,
+  isGeneratingTopics,
+  isApplying,
+  onGenerateTopics,
+  onSelectTopic,
+  onStartAutoRun,
 }: {
-  isPolishing: boolean;
-  onPolish: () => Promise<void>;
+  isGeneratingTopics: boolean;
+  isApplying: boolean;
+  onGenerateTopics: () => Promise<void>;
+  onSelectTopic: (index: number) => Promise<void>;
+  onStartAutoRun: () => void;
 }) {
   const store = useWorkshopStore();
-  const [showDetail, setShowDetail] = useState(false);
+  const hasSelectedTopic = store.selectedTopicIndex !== null;
 
-  async function handlePolish() {
-    if (!store.form.product_name.trim()) {
-      alert("请先填写产品名称");
-      return;
+  const handleProductInput = (value: string) => {
+    store.setForm({ ...store.form, product_name: value });
+    if (!store.oneLiner) {
+      store.setOneLiner("为该产品制作一个吸引人的农业短视频");
     }
-    if (!store.oneLiner.trim()) {
-      alert("请填写一句话创意");
-      return;
-    }
-    await onPolish();
-    setShowDetail(true);
-  }
+  };
 
   return (
     <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-[1fr_2fr]">
-        <div>
-          <Label htmlFor={`planner-product_name`} className="text-xs">
-            产品名称 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id={`planner-product_name`}
-            value={store.form.product_name}
-            onChange={(e) => store.setForm({ ...store.form, product_name: e.target.value })}
-            placeholder="如：阳山水蜜桃"
-            className="mt-1"
-          />
-        </div>
-        <div>
-          <Label htmlFor={`planner-one_liner`} className="text-xs">
-            一句话创意 <span className="text-destructive">*</span>
-          </Label>
-          <Textarea
-            id={`planner-one_liner`}
-            value={store.oneLiner}
-            onChange={(e) => store.setOneLiner(e.target.value)}
-            placeholder="如：想拍阳山水蜜桃产地溯源短视频"
-            className="mt-1"
-            rows={1}
-          />
-        </div>
+      <div>
+        <Label htmlFor={`planner-product_input`} className="text-xs">
+          产品名称 <span className="text-destructive">*</span>
+        </Label>
+        <Textarea
+          id={`planner-product_input`}
+          value={store.form.product_name}
+          onChange={(e) => handleProductInput(e.target.value)}
+          placeholder="请输入您想要制作的产品名称"
+          className="mt-1"
+          rows={2}
+        />
       </div>
 
       <div className="flex items-center gap-2">
         <Button
-          onClick={() => void handlePolish()}
-          disabled={isPolishing}
+          onClick={() => void onGenerateTopics()}
+          disabled={isGeneratingTopics || isApplying || !store.form.product_name.trim()}
           size="sm"
         >
-          {isPolishing ? (
+          {isGeneratingTopics ? (
             <>
-              <Loader2 size={14} className="animate-spin" /> 润写中
+              <Loader2 size={14} className="animate-spin" /> 选题中
+            </>
+          ) : isApplying ? (
+            <>
+              <Loader2 size={14} className="animate-spin" /> 应用中
             </>
           ) : (
             <>
-              <Sparkles size={14} /> AI 润写
+              <Sparkles size={14} /> AI 选题
             </>
           )}
         </Button>
-
-        {store.form.selling_points.trim() && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowDetail((v) => !v)}
-          >
-            {showDetail ? (
-              <>
-                <ChevronUp size={14} /> 收起详情
-              </>
-            ) : (
-              <>
-                <ChevronDown size={14} /> 查看/编辑详情
-              </>
-            )}
-          </Button>
-        )}
       </div>
 
-      {showDetail && store.form.selling_points.trim() && (
-        <div className="rounded-md border border-border bg-background/50 p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-xs text-ink-soft">AI 已补全以下信息，可直接编辑修正</span>
+      {store.topics.length > 0 && (
+        <TopicCandidateGrid
+          topics={store.topics}
+          selectedIndex={store.selectedTopicIndex}
+          disabled={isGeneratingTopics || isApplying}
+          onSelect={(i) => {
+            void onSelectTopic(i);
+          }}
+        />
+      )}
+
+      {hasSelectedTopic && !isApplying && (
+        <div className="rounded-md border border-success/30 bg-success/5 p-3">
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center gap-1.5 text-xs text-success">
+              <Check size={12} />
+              AI 已自动补全创作信息（产地、品类、卖点等），可直接开始执行
+            </div>
             <Button
-              variant="ghost"
               size="sm"
-              onClick={() => void handlePolish()}
-              disabled={isPolishing}
-              className="h-7 px-2 text-xs"
+              className="h-8 w-fit text-xs"
+              onClick={() => onStartAutoRun()}
+              disabled={store.isStepRunning}
             >
-              <Sparkles size={12} /> 重新润写
+              {store.isStepRunning ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" /> 执行中
+                </>
+              ) : (
+                <>
+                  <Play size={12} /> 开始执行
+                </>
+              )}
             </Button>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <FormInput
-              label="产地"
-              value={store.form.origin}
-              onChange={(v) => store.setForm({ ...store.form, origin: v })}
-              placeholder="如：江苏无锡"
-            />
-            <FormInput
-              label="品类"
-              value={store.form.category}
-              onChange={(v) => store.setForm({ ...store.form, category: v })}
-              placeholder="如：水果 / 蔬菜 / 茶叶"
-            />
-            <FormInput
-              label="目标平台"
-              value={store.form.target_platform ?? "抖音"}
-              onChange={(v) => store.setForm({ ...store.form, target_platform: v })}
-              placeholder="抖音 / 快手 / 视频号"
-            />
-            <FormInput
-              label="目标时长"
-              value={store.form.target_duration ?? "30-60秒"}
-              onChange={(v) => store.setForm({ ...store.form, target_duration: v })}
-              placeholder="15-30秒 / 30-60秒"
-            />
-            <div className="sm:col-span-2">
-              <Label htmlFor="planner-selling_points" className="text-xs">卖点</Label>
-              <Textarea
-                id="planner-selling_points"
-                value={store.form.selling_points}
-                onChange={(e) => store.setForm({ ...store.form, selling_points: e.target.value })}
-                placeholder="用一句话描述核心卖点"
-                className="mt-1"
-                rows={2}
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <Label htmlFor="planner-additional_info" className="text-xs">补充信息</Label>
-              <Textarea
-                id="planner-additional_info"
-                value={store.form.additional_info ?? ""}
-                onChange={(e) => store.setForm({ ...store.form, additional_info: e.target.value })}
-                placeholder="如：预算有限、希望突出产地溯源"
-                className="mt-1"
-                rows={2}
-              />
-            </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function FormInput({
-  label,
-  required,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  required?: boolean;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <div>
-      <Label className="text-xs">
-        {label} {required && <span className="text-destructive">*</span>}
-      </Label>
-      <Input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="mt-1"
-      />
     </div>
   );
 }

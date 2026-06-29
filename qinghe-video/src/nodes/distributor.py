@@ -15,6 +15,7 @@ from pydantic import ValidationError
 from src.config import get_system_prompt
 from src.models import DistributorOutput
 from src.nodes.llm import get_llm
+from src.utils.json_parser import invoke_structured_llm
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +34,6 @@ def distributor_node(state: dict[str, Any]) -> dict[str, Any]:
     logger.info("[Distributor] 开始生成投放方案，平台=%s", state.get("target_platform"))
     try:
         llm = get_llm(temperature=0.7)
-        structured_llm = llm.with_structured_output(DistributorOutput)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -50,8 +50,10 @@ def distributor_node(state: dict[str, Any]) -> dict[str, Any]:
             ]
         )
 
-        chain = prompt | structured_llm
-        result: DistributorOutput = chain.invoke(
+        result: DistributorOutput = invoke_structured_llm(
+            llm,
+            prompt,
+            DistributorOutput,
             {
                 "product_name": state.get("product_name", ""),
                 "target_platform": state.get("target_platform", "抖音"),
@@ -60,7 +62,7 @@ def distributor_node(state: dict[str, Any]) -> dict[str, Any]:
                 "copywriter_output": json.dumps(state.get("copywriter_output", {}), ensure_ascii=False, indent=2),
                 "scriptwriter_output": json.dumps(state.get("scriptwriter_output", {}), ensure_ascii=False, indent=2),
                 "visual_output": json.dumps(state.get("visual_output", {}), ensure_ascii=False, indent=2),
-            }
+            },
         )
 
         logger.info("[Distributor] 投放方案生成完成，标题=%s", result.publish_content.title)

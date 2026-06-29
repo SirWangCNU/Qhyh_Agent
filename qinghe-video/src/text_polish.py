@@ -23,6 +23,7 @@ from pydantic import BaseModel, ConfigDict, ValidationError
 
 from src.config import get_system_prompt
 from src.nodes.llm import get_llm
+from src.utils.json_parser import invoke_structured_llm
 
 logger = logging.getLogger(__name__)
 
@@ -73,7 +74,6 @@ def polish_user_input(req: PolishRequest) -> PolishResult:
     )
     try:
         llm = get_llm(temperature=0.7)
-        structured_llm = llm.with_structured_output(PolishResult)
 
         prompt = ChatPromptTemplate.from_messages(
             [
@@ -87,12 +87,14 @@ def polish_user_input(req: PolishRequest) -> PolishResult:
             ]
         )
 
-        chain = prompt | structured_llm
-        result: PolishResult = chain.invoke(
+        result: PolishResult = invoke_structured_llm(
+            llm,
+            prompt,
+            PolishResult,
             {
                 "product_name": req.product_name,
                 "one_liner": req.one_liner,
-            }
+            },
         )
 
         logger.info(

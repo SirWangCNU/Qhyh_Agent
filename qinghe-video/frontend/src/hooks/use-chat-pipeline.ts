@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useGenerateStream } from "./use-generate-stream";
 import { useRunAgentStep } from "./use-agents";
 import { useVideoMvp } from "./use-media";
@@ -21,6 +21,12 @@ export function useChatPipeline() {
   const [lastUserInput, setLastUserInput] = useState<UserInput | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
+  // 使用 ref 保存最新累计状态，避免 setState 异步导致循环内读到旧值
+  const currentStateRef = useRef<GenerateResult>({});
+  useEffect(() => {
+    currentStateRef.current = workshopState;
+  }, [workshopState]);
+
   const runStep = useRunAgentStep();
   const videoMvp = useVideoMvp();
   const stream = useGenerateStream();
@@ -41,6 +47,7 @@ export function useChatPipeline() {
   function reset() {
     setMessages([]);
     setWorkshopState({});
+    currentStateRef.current = {};
     setLastUserInput(null);
     setIsRunning(false);
   }
@@ -52,7 +59,9 @@ export function useChatPipeline() {
       return;
     }
     setMessages(plan.messages ?? []);
-    setWorkshopState(plan.state ?? {});
+    const loadedState = plan.state ?? {};
+    setWorkshopState(loadedState);
+    currentStateRef.current = loadedState;
   }
 
   /**
@@ -103,6 +112,9 @@ export function useChatPipeline() {
       "distributor",
     ];
 
+    // 使用 ref 累计 state，避免 React 异步 setState 导致循环里读到旧值
+    const latestState = currentStateRef.current;
+
     try {
       for (const step of steps) {
         const meta = NODE_META[step];
@@ -119,12 +131,13 @@ export function useChatPipeline() {
           const resp = await runStep.mutateAsync({
             step,
             input: userInput,
-            state: workshopState,
+            state: latestState,
           });
           if (resp.status === "error") {
             throw new Error(resp.error ?? `${step} 执行失败`);
           }
-          // 累计 state
+          // 累计 state：ref 保证下一步拿到最新结果，并同步 UI state
+          currentStateRef.current = resp.state;
           setWorkshopState(resp.state);
           updateMessage(msgId, {
             type: "agent",
@@ -157,7 +170,7 @@ export function useChatPipeline() {
       ts: Date.now(),
     });
     try {
-      const resp = await videoMvp.mutateAsync({ state: workshopState });
+      const resp = await videoMvp.mutateAsync({ state: currentStateRef.current });
       updateMessage(msgId, {
         type: "video",
         content: "🎬 视频已生成",

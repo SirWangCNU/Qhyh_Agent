@@ -6,6 +6,7 @@ import { WorkshopPage } from "@/pages/WorkshopPage";
 import { ImageStudioPage } from "@/pages/ImageStudioPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { PlanPage } from "@/pages/PlanPage";
+import { AssetsPage } from "@/pages/AssetsPage";
 
 /**
  * 哈希路由表。
@@ -23,6 +24,7 @@ export const router = createHashRouter([
       { path: "image-studio", element: <ImageStudioPage /> },
       { path: "agents", element: <AgentsPage /> },
       { path: "plan", element: <PlanPage /> },
+      { path: "assets", element: <AssetsPage /> },
       { path: "*", element: <Navigate to="/create" replace /> },
     ],
   },

@@ -5,14 +5,15 @@ import { WorkshopStepCard } from "./WorkshopStepCard";
 
 interface WorkshopStepListProps {
   steps: Record<WorkshopStepKey, WorkshopStepStatus>;
-  autoRunToStep: number;
   currentStep: WorkshopStepKey;
-  onToggleAutoRun: (step: number) => void;
   onStepClick: (key: WorkshopStepKey) => void;
   onRetry: (key: WorkshopStepKey) => void;
   onRun: (key: WorkshopStepKey) => void;
-  onPolish: () => Promise<void>;
-  isPolishing: boolean;
+  onStartAutoRun: () => void;
+  isApplying: boolean;
+  onGenerateTopics: () => Promise<void>;
+  onSelectTopic: (index: number) => Promise<void>;
+  isGeneratingTopics: boolean;
   disabled: boolean;
 }
 
@@ -28,12 +29,14 @@ interface WorkshopStepListProps {
  * - Step 8（全宽）
  */
 export function WorkshopStepList({
-  onToggleAutoRun,
   onStepClick,
   onRetry,
   onRun,
-  onPolish,
-  isPolishing,
+  onStartAutoRun,
+  isApplying,
+  onGenerateTopics,
+  onSelectTopic,
+  isGeneratingTopics,
 }: WorkshopStepListProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -41,12 +44,14 @@ export function WorkshopStepList({
         <WorkshopStepCard
           key={cfg.key}
           cfg={cfg}
-          onToggleAutoRun={onToggleAutoRun}
           onStepClick={onStepClick}
           onRun={onRun}
           onRetry={onRetry}
-          onPolish={onPolish}
-          isPolishing={isPolishing}
+          onStartAutoRun={onStartAutoRun}
+          isApplying={isApplying}
+          onGenerateTopics={onGenerateTopics}
+          onSelectTopic={onSelectTopic}
+          isGeneratingTopics={isGeneratingTopics}
         />
       ))}
     </div>

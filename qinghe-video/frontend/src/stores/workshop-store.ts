@@ -1,5 +1,11 @@
 import { create } from "zustand";
-import type { GenerateResult, UserInput } from "@/types/api";
+import type {
+  ConsistencyImageSlot,
+  ConsistencyImageType,
+  GenerateResult,
+  TopicCandidate,
+  UserInput,
+} from "@/types/api";
 import {
   WORKSHOP_STEPS,
   DEFAULT_AUTO_RUN_TO,
@@ -8,7 +14,7 @@ import {
 } from "@/lib/constants";
 
 /**
- * 工坊 8 步流水线状态管理。
+ * 工坊 9 步流水线状态管理。
  *
  * 独立于 pipeline-store（后者绑定 SSE 流式生成，仅 6 个 LLM 节点）。
  * 状态自动持久化到 sessionStorage，刷新或路由切换后可恢复。
@@ -27,6 +33,10 @@ export interface WorkshopMediaResults {
   audioUrl: string | null;
   audioPath: string | null;
   videoUrl: string | null;
+  /** 一致性生图（第 3 步）三类结果，独立存储便于子卡片单独更新。 */
+  characterImage: ConsistencyImageSlot | null;
+  objectImage: ConsistencyImageSlot | null;
+  sceneImage: ConsistencyImageSlot | null;
 }
 
 interface WorkshopState {
@@ -43,7 +53,7 @@ interface WorkshopState {
   /** 媒体生成结果。 */
   mediaResults: WorkshopMediaResults;
 
-  /** 自动执行到第几步（1~8）。 */
+  /** 自动执行到第几步（1~9）。 */
   autoRunToStep: number;
   /** 当前查看/执行的步骤。 */
   currentStep: WorkshopStepKey;
@@ -52,11 +62,21 @@ interface WorkshopState {
   /** 是否有步骤正在执行。 */
   isStepRunning: boolean;
 
+  /** 出图步骤是否使用人物参考图（图生图，B1 联动）。默认关闭。 */
+  imageGenUseCharacterRef: boolean;
+
   /** 产品信息表单。 */
   form: UserInput;
 
   /** 一句话创意（Step1 极简输入）。 */
   oneLiner: string;
+
+  /** AI 选题候选列表。 */
+  topics: TopicCandidate[];
+  /** 用户选定的候选索引。 */
+  selectedTopicIndex: number | null;
+  /** 用户选定的完整选题对象。 */
+  selectedTopic: TopicCandidate | null;
 
   // ---- 动作 ----
   setStepStatus: (key: WorkshopStepKey, status: WorkshopStepStatus) => void;
@@ -65,12 +85,21 @@ interface WorkshopState {
   clearStepError: (key: WorkshopStepKey) => void;
   setWorkshopState: (state: GenerateResult) => void;
   setMediaResults: (results: Partial<WorkshopMediaResults>) => void;
+  /** 单独更新某一类一致性图（character/object/scene），避免浅合并覆盖其他类。 */
+  setConsistencyImage: (type: ConsistencyImageType, slot: ConsistencyImageSlot | null) => void;
+  /** 把某类一致性主体描述写入 workshopState.consistency_references，供 visual_designer 注入。 */
+  setConsistencyReferences: (type: ConsistencyImageType, subject: string) => void;
   setAutoRunToStep: (step: number) => void;
   setCurrentStep: (key: WorkshopStepKey) => void;
   setAutoRunning: (running: boolean) => void;
   setStepRunning: (running: boolean) => void;
+  /** 设置出图步骤是否使用人物参考图。 */
+  setImageGenUseCharacterRef: (v: boolean) => void;
   setForm: (form: UserInput) => void;
   setOneLiner: (v: string) => void;
+  setTopics: (topics: TopicCandidate[]) => void;
+  setSelectedTopicIndex: (i: number | null) => void;
+  setSelectedTopic: (topic: TopicCandidate | null) => void;
   reset: () => void;
   hydrate: () => void;
 }
@@ -101,6 +130,9 @@ const DEFAULT_MEDIA: WorkshopMediaResults = {
   audioUrl: null,
   audioPath: null,
   videoUrl: null,
+  characterImage: null,
+  objectImage: null,
+  sceneImage: null,
 };
 
 const DEFAULT_STATE = {
@@ -113,8 +145,12 @@ const DEFAULT_STATE = {
   currentStep: "planner" as WorkshopStepKey,
   isAutoRunning: false,
   isStepRunning: false,
+  imageGenUseCharacterRef: false,
   form: { ...DEFAULT_FORM },
   oneLiner: "",
+  topics: [],
+  selectedTopicIndex: null,
+  selectedTopic: null,
 };
 
 /** 持久化到 sessionStorage。 */
@@ -128,8 +164,12 @@ function persist(state: WorkshopState) {
       mediaResults: state.mediaResults,
       autoRunToStep: state.autoRunToStep,
       currentStep: state.currentStep,
+      imageGenUseCharacterRef: state.imageGenUseCharacterRef,
       form: state.form,
       oneLiner: state.oneLiner,
+      topics: state.topics,
+      selectedTopicIndex: state.selectedTopicIndex,
+      selectedTopic: state.selectedTopic,
     };
     sessionStorage.setItem(STORAGE_KEYS.workshop, JSON.stringify(snapshot));
   } catch {
@@ -183,6 +223,29 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
     persist(get());
   },
 
+  setConsistencyImage: (type, slot) => {
+    set((s) => {
+      const key = type === "character" ? "characterImage" : type === "object" ? "objectImage" : "sceneImage";
+      return {
+        mediaResults: { ...s.mediaResults, [key]: slot },
+      };
+    });
+    persist(get());
+  },
+
+  setConsistencyReferences: (type, subject) => {
+    set((s) => ({
+      workshopState: {
+        ...s.workshopState,
+        consistency_references: {
+          ...(s.workshopState.consistency_references ?? {}),
+          [type]: subject,
+        },
+      },
+    }));
+    persist(get());
+  },
+
   setAutoRunToStep: (step) => {
     set({ autoRunToStep: Math.max(1, Math.min(WORKSHOP_STEPS.length, step)) });
     persist(get());
@@ -195,6 +258,10 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   setAutoRunning: (running) => set({ isAutoRunning: running }),
   setStepRunning: (running) => set({ isStepRunning: running }),
+  setImageGenUseCharacterRef: (v) => {
+    set({ imageGenUseCharacterRef: v });
+    persist(get());
+  },
 
   setForm: (form) => {
     set({ form });
@@ -203,6 +270,36 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   setOneLiner: (v) => {
     set({ oneLiner: v });
+    persist(get());
+  },
+
+  setTopics: (topics) => {
+    set((s) => ({
+      topics,
+      selectedTopicIndex: null,
+      selectedTopic: null,
+      workshopState: { ...s.workshopState, selected_topic: undefined },
+    }));
+    persist(get());
+  },
+
+  setSelectedTopicIndex: (i) => {
+    set((s) => {
+      const topic = i !== null && i >= 0 && i < s.topics.length ? s.topics[i] : null;
+      return {
+        selectedTopicIndex: i,
+        selectedTopic: topic,
+        workshopState: { ...s.workshopState, selected_topic: topic ?? undefined },
+      };
+    });
+    persist(get());
+  },
+
+  setSelectedTopic: (topic) => {
+    set((s) => ({
+      selectedTopic: topic,
+      workshopState: { ...s.workshopState, selected_topic: topic ?? undefined },
+    }));
     persist(get());
   },
 
@@ -228,8 +325,12 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         mediaResults: { ...DEFAULT_MEDIA, ...(snapshot.mediaResults ?? {}) },
         autoRunToStep: snapshot.autoRunToStep ?? DEFAULT_AUTO_RUN_TO,
         currentStep: snapshot.currentStep ?? "planner",
+        imageGenUseCharacterRef: snapshot.imageGenUseCharacterRef ?? false,
         form: { ...DEFAULT_FORM, ...(snapshot.form ?? {}) },
         oneLiner: snapshot.oneLiner ?? "",
+        topics: snapshot.topics ?? [],
+        selectedTopicIndex: snapshot.selectedTopicIndex ?? null,
+        selectedTopic: snapshot.selectedTopic ?? null,
         isAutoRunning: false,
         isStepRunning: false,
       });

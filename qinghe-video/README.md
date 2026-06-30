@@ -110,7 +110,6 @@ qinghe-video/
 │   │   │   ├── CreatePage.tsx      # 开始创作（SSE 流水线）
 │   │   │   ├── ChatPage.tsx        # 对话创作
 │   │   │   ├── WorkshopPage.tsx    # 分步工坊
-│   │   │   ├── ImageStudioPage.tsx # 图像工作室
 │   │   │   ├── AgentsPage.tsx      # Agent 管理
 │   │   │   └── PlanPage.tsx        # 方案详情
 │   │   ├── components/             # UI 组件

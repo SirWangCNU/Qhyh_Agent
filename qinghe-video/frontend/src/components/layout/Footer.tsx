@@ -55,11 +55,6 @@ export function Footer() {
                 </Link>
               </li>
               <li>
-                <Link to={ROUTES.imageStudio} className="transition-colors hover:text-primary">
-                  图像工作室
-                </Link>
-              </li>
-              <li>
                 <Link to={ROUTES.plan} className="transition-colors hover:text-primary">
                   规划设计
                 </Link>

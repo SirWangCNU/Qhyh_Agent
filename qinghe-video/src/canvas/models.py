@@ -94,3 +94,79 @@ class UploadResponse(BaseModel):
     upload_id: str = Field(..., description="上传标识（文件名）")
     filename: str
     file_size: int
+
+
+# ============================================================
+# 故事板（Storyboard）模型
+# ============================================================
+
+# 分镜参考图类型（与工坊一致性图对齐）
+ShotRefType = Literal["character", "object", "scene"]
+
+
+class ShotInput(BaseModel):
+    """单个分镜输入（来自工坊 scriptwriter + visual_designer 输出）。"""
+
+    shot_id: str = Field(..., description="分镜 id（来自 scriptwriter_output.shots）")
+    title: str = Field("", description="镜号标题，如「分镜 1」")
+    visual_prompt: str = Field(..., min_length=1, description="画面描述 / 图片提示词")
+    narration: str = Field("", description="本镜旁白文本")
+    duration: float = Field(3.5, ge=0.1, description="本镜时长（秒）")
+    reference_image_url: str | None = Field(
+        None, description="本镜绑定的参考图 URL（优先于 character/object/scene_ref）"
+    )
+    reference_type: ShotRefType | None = Field(
+        None, description="参考图类型，决定回退到哪类一致性图"
+    )
+    node_id: str | None = Field(
+        None, description="前端 ShotNode 节点 id，用于回写状态与结果图"
+    )
+
+
+class StoryboardGenerateRequest(BaseModel):
+    """故事板批量生成请求。"""
+
+    shots: list[ShotInput] = Field(..., min_length=1, description="分镜列表")
+    character_ref: str | None = Field(None, description="人物一致性参考图 URL")
+    object_ref: str | None = Field(None, description="物品一致性参考图 URL")
+    scene_ref: str | None = Field(None, description="场景一致性参考图 URL")
+    size: str | None = Field(None, description="图片尺寸，如 1920x1920")
+    model: str | None = Field(None, description="图片模型 id")
+    concurrency: int = Field(3, ge=1, le=8, description="并发数上限")
+
+
+class StoryboardGenerateResult(BaseModel):
+    """故事板批量生成结果。"""
+
+    results: list[GenerateResult] = Field(
+        default_factory=list, description="每个分镜的生成结果（顺序与请求一致）"
+    )
+
+
+class ShotResultInput(BaseModel):
+    """单个分镜的合成输入。"""
+
+    shot_id: str
+    image_url: str = Field(..., description="本镜结果图 URL")
+    narration: str = Field("", description="本镜旁白")
+    duration: float = Field(3.5, ge=0.1)
+
+
+class StoryboardComposeRequest(BaseModel):
+    """故事板视频合成请求。"""
+
+    shot_results: list[ShotResultInput] = Field(
+        ..., min_length=1, description="各分镜结果图与旁白"
+    )
+    voiceover_text: str | None = Field(
+        None, description="整体旁白（优先于 shot narration 拼接）"
+    )
+
+
+class StoryboardComposeResult(BaseModel):
+    """故事板视频合成结果。"""
+
+    status: str
+    video_url: str | None = None
+    audio_url: str | None = None
+    error: str | None = None

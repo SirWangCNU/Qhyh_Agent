@@ -1,7 +1,12 @@
 /**
  * 无限画布页面（路由入口）。
  *
- * 三栏布局：顶部 CanvasProjectBar + 左 CanvasToolbar + 中 CanvasFlow + 右 NodeInspector。
+ * 三栏布局：顶部 CanvasProjectBar + 左 CanvasToolbar + 中 CanvasFlow + 右侧栏。
+ *
+ * 右侧栏策略：
+ * - 自由模式（mode === "free"）：渲染 NodeInspector（节点属性面板）。
+ * - 故事板模式（mode === "storyboard"）：渲染 StoryboardSidebar（素材库/批量操作/时间轴），
+ *   ShotNode 本身已内置编辑控件，无需 NodeInspector；合成完成后弹出视频预览 Dialog。
  *
  * 生命周期：
  * - 挂载时 hydrate（从 sessionStorage 恢复 projectId/name）
@@ -11,9 +16,17 @@
  *
  * 无项目时显示居中「新建画布」空状态。
  */
-import { useEffect } from "react";
-import { LayoutGrid, Plus, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { LayoutGrid, Plus, Loader2, Film } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogClose,
+} from "@/components/ui/dialog";
 import { useCanvasStore } from "@/stores/canvas-store";
 import {
   useCanvasProject,
@@ -24,6 +37,7 @@ import { useCanvasAutosave } from "@/components/canvas/hooks/useCanvasAutosave";
 import { CanvasProjectBar } from "@/components/canvas/panels/CanvasProjectBar";
 import { CanvasToolbar } from "@/components/canvas/panels/CanvasToolbar";
 import { NodeInspector } from "@/components/canvas/panels/NodeInspector";
+import { StoryboardSidebar } from "@/components/canvas/panels/StoryboardSidebar";
 import { CanvasFlow } from "@/components/canvas/CanvasFlow";
 
 export function CanvasPage() {
@@ -33,10 +47,14 @@ export function CanvasPage() {
   const loaded = useCanvasStore((s) => s.loaded);
   const loadProject = useCanvasStore((s) => s.loadProject);
   const hydrate = useCanvasStore((s) => s.hydrate);
+  const mode = useCanvasStore((s) => s.mode);
 
   const dnd = useCanvasDnd();
   const { data, isFetching } = useCanvasProject(projectId);
   const createMutation = useCreateCanvasProject();
+
+  // 合成视频成功后的预览 URL（null 时关闭 Dialog）
+  const [composeVideoUrl, setComposeVideoUrl] = useState<string | null>(null);
 
   // 首次挂载：从 sessionStorage 恢复 projectId
   useEffect(() => {
@@ -130,8 +148,47 @@ export function CanvasPage() {
             onInit={dnd.setReactFlowInstance}
           />
         </div>
-        <NodeInspector />
+        {mode === "storyboard" ? (
+          <StoryboardSidebar onComposeComplete={setComposeVideoUrl} />
+        ) : (
+          <NodeInspector />
+        )}
       </div>
+
+      {/* 故事板视频合成完成后的预览 Dialog */}
+      <Dialog
+        open={composeVideoUrl !== null}
+        onOpenChange={(open) => {
+          if (!open) setComposeVideoUrl(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-1.5">
+              <Film className="h-4 w-4" /> 故事板视频已合成
+            </DialogTitle>
+            <DialogDescription>
+              已生成竖屏视频，可在线预览或前往「我的资产」下载。
+            </DialogDescription>
+          </DialogHeader>
+          {composeVideoUrl && (
+            <video
+              src={composeVideoUrl}
+              controls
+              autoPlay
+              className="w-full rounded border bg-black"
+              style={{ aspectRatio: "9 / 16", maxHeight: "60vh" }}
+            />
+          )}
+          <div className="flex justify-end gap-2 pt-2">
+            <DialogClose asChild>
+              <Button variant="outline" size="sm">
+                关闭
+              </Button>
+            </DialogClose>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

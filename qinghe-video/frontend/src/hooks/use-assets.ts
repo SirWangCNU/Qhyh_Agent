@@ -76,7 +76,7 @@ export interface AssetUploadParams {
  * 手动上传资产 hook（POST /api/assets/upload，multipart/form-data）。
  *
  * FormData 走原生 fetch（绕过 apiFetch 的 JSON 序列化），手动注入 Authorization。
- * 参考 use-media.ts 的 useImageStudioGenerate 模式。
+ * 参考 use-media.ts 的 useConsistencyImageGenerate 模式。
  */
 export function useUploadAsset() {
   const qc = useQueryClient();

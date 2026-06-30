@@ -12,6 +12,12 @@ import {
 import { apiFetch, apiGet, apiPost } from "@/lib/api";
 import type { Edge, Viewport } from "@xyflow/react";
 import type { CanvasNode, RefType } from "@/components/canvas/types";
+import type {
+  StoryboardComposeRequestDTO,
+  StoryboardComposeResponseDTO,
+  StoryboardGenerateRequestDTO,
+  StoryboardGenerateResponseDTO,
+} from "@/types/api";
 
 // ============================================================
 // API DTO（与后端 src/canvas/models.py 对齐）
@@ -197,5 +203,48 @@ export function useCanvasModels() {
     queryFn: () => apiGet<string[]>("/api/canvas/models"),
     staleTime: 5 * 60 * 1000,
     retry: 1,
+  });
+}
+
+// ============================================================
+// 故事板（Storyboard）API
+// ============================================================
+
+/** 批量生成故事板分镜图片。 POST /api/canvas/projects/{id}/storyboard/generate */
+export function useStoryboardGenerateMutation() {
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      body,
+    }: {
+      projectId: string;
+      body: StoryboardGenerateRequestDTO;
+    }) =>
+      apiPost<StoryboardGenerateResponseDTO>(
+        `/api/canvas/projects/${projectId}/storyboard/generate`,
+        body,
+      ),
+  });
+}
+
+/** 故事板分镜图合成视频。 POST /api/canvas/projects/{id}/storyboard/compose */
+export function useStoryboardComposeMutation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      body,
+    }: {
+      projectId: string;
+      body: StoryboardComposeRequestDTO;
+    }) =>
+      apiPost<StoryboardComposeResponseDTO>(
+        `/api/canvas/projects/${projectId}/storyboard/compose`,
+        body,
+      ),
+    onSuccess: () => {
+      // 合成完成后刷新资产列表（视频/音频会落库到资产表）
+      qc.invalidateQueries({ queryKey: ["assets"] });
+    },
   });
 }

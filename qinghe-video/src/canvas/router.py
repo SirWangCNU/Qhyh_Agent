@@ -27,6 +27,10 @@ from src.canvas.models import (
     CanvasProjectCreate,
     CanvasProjectUpdate,
     GenerateRequest,
+    StoryboardComposeRequest,
+    StoryboardComposeResult,
+    StoryboardGenerateRequest,
+    StoryboardGenerateResult,
 )
 from src.canvas.persistence import (
     create_project,
@@ -37,6 +41,10 @@ from src.canvas.persistence import (
     update_project,
 )
 from src.canvas.service import run_generate
+from src.canvas.storyboard_service import (
+    batch_generate_shots,
+    compose_storyboard_video,
+)
 from src.db.database import get_db
 from src.db.models import User
 
@@ -225,6 +233,70 @@ async def generate_node_api(
         "error": result.error,
     })
     # #endregion
+    return result.model_dump()
+
+
+# ---------- 故事板批量生成与合成 ----------
+
+@router.post(
+    "/api/canvas/projects/{project_id}/storyboard/generate",
+    summary="批量生成故事板分镜图片",
+)
+async def generate_storyboard_api(
+    project_id: str,
+    req: StoryboardGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """批量为故事板分镜生成图片。
+
+    - 按 shot 顺序并发生成（并发数由 req.concurrency 控制，默认 3）
+    - 每个 shot 的参考图优先级：shot.reference_image_url → character/object/scene_ref
+    - 生成成功后回写对应 ShotNode 的 status/resultImageUrl
+    - 返回 StoryboardGenerateResult：每个分镜的结果列表（顺序与请求一致）
+    """
+    try:
+        result = await batch_generate_shots(db, project_id, current_user, req)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(
+            "[API] 故事板批量生成失败 project=%s", project_id
+        )
+        raise HTTPException(status_code=500, detail=f"故事板生成失败: {e}") from e
+    return result.model_dump()
+
+
+@router.post(
+    "/api/canvas/projects/{project_id}/storyboard/compose",
+    summary="故事板分镜图合成视频",
+)
+async def compose_storyboard_api(
+    project_id: str,
+    req: StoryboardComposeRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """将故事板分镜结果图与旁白合成为 9:16 竖屏 mp4。
+
+    - 收集各 shot 的 image_url（按顺序）
+    - 旁白优先 req.voiceover_text，否则拼接各 shot narration
+    - TTS 合成音频 → video_compose 拼接图片 + 音频
+    - 返回 StoryboardComposeResult：{ status, video_url, audio_url, error? }
+    """
+    try:
+        result = await compose_storyboard_video(
+            db, project_id, current_user, req
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(
+            "[API] 故事板视频合成失败 project=%s", project_id
+        )
+        raise HTTPException(
+            status_code=500, detail=f"故事板合成失败: {e}"
+        ) from e
     return result.model_dump()
 
 

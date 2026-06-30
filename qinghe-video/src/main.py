@@ -34,7 +34,6 @@ from src.db.database import get_db
 from src.db.models import User
 from src.graph import app_graph
 from src.image_generation import ImageGenerationRequest, generate_image
-from src.image_studio import image_studio_router
 from src.models import UserInput
 from src.text_polish import PolishRequest, polish_user_input
 from src.topic_generation import TopicRequest, generate_topics
@@ -66,8 +65,6 @@ app = FastAPI(
 
 # 注册鉴权路由
 app.include_router(auth_router)
-# 注册图像处理工作室路由
-app.include_router(image_studio_router)
 # 注册一致性生图路由（人物/物品/场景参考图）
 app.include_router(consistency_images_router)
 # 注册「我的资产」路由（用户生成媒体资产持久化）
@@ -136,7 +133,6 @@ def index():
 @app.get("/agents", summary="Agent 管理页面")
 @app.get("/create", summary="开始创作页面")
 @app.get("/workshop", summary="分步工坊页面")
-@app.get("/image-studio", summary="图像工作室页面")
 @app.get("/canvas", summary="无限画布页面")
 def spa_routes():
     """SPA 路由兼容：所有前端路径返回同一 index.html。"""

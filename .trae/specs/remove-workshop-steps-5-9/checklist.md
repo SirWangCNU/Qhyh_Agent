@@ -1,0 +1,14 @@
+- [x] `lib/constants.ts` 中 `WorkshopStepKey` 仅保留 `NodeKey | "consistency_images"`
+- [x] `WORKSHOP_STEPS` 仅剩 4 步：策划、文案、一致性生图、脚本
+- [x] `DEFAULT_AUTO_RUN_TO` 等于 4
+- [x] `workshop-store` 中不再包含 `images`、`audioUrl`、`audioPath`、`videoUrl`、`imageGenUseCharacterRef`
+- [x] `workshop-store` 仍保留 `characterImage`/`objectImage`/`sceneImage` 供画布导出
+- [x] `WorkshopPage` 不再导入/调用 `useGenerateImage`、`useGenerateTTS`、`useComposeVideo`
+- [x] `WorkshopPage` 中已无 `execImageGen`、`execTTS`、`execCompose` 函数
+- [x] `WorkshopPage` 不再在合成后自动调用 `report_generator`
+- [x] `WorkshopPage` 的 `buildStoryboardPayload` 不再强制依赖 `visual_output`
+- [x] `WorkshopStepDetail` 中已无 `ImageGenRefToggle`、`image_gen`、`tts`、`compose` 分支
+- [x] 页面标题与说明文案与剩余 4 步保持一致
+- [x] `npx tsc --noEmit` 无错误
+- [x] `npm run lint` 因项目未安装 eslint 无法运行，已由 TypeScript 编译兜底
+- [x] 工坊页面可正常渲染，步骤 1-4 及导出到画布功能可用

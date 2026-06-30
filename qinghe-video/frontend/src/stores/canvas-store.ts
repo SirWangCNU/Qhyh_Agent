@@ -37,6 +37,19 @@ export interface LoadedProject {
   viewport: Viewport;
 }
 
+/** 故事板素材库单条参考图。 */
+export interface StoryboardAsset {
+  url: string;
+  label: string;
+}
+
+/** 故事板素材库（人物/物品/场景一致性图）。 */
+export interface StoryboardAssets {
+  character?: StoryboardAsset;
+  object?: StoryboardAsset;
+  scene?: StoryboardAsset;
+}
+
 interface CanvasState {
   /** 当前项目 id（null = 未选择/未创建）。 */
   projectId: string | null;
@@ -56,6 +69,12 @@ interface CanvasState {
   saveStatus: SaveStatus;
   /** 项目数据是否已从服务端载入（防止重复 loadProject）。 */
   loaded: boolean;
+  /** 画布模式：自由创作 / 故事板。 */
+  mode: "free" | "storyboard";
+  /** 故事板素材库（仅在故事板模式下使用）。 */
+  storyboardAssets: StoryboardAssets;
+  /** 故事板整体旁白文本（来自工坊 copywriter.full_script）。 */
+  storyboardVoiceover: string;
 
   // ---- 项目级动作 ----
   loadProject: (p: LoadedProject) => void;
@@ -73,6 +92,17 @@ interface CanvasState {
   /** 从 sessionStorage 恢复 projectId / name。 */
   hydrate: () => void;
 
+  // ---- 故事板模式动作 ----
+  setMode: (mode: "free" | "storyboard") => void;
+  setStoryboardAssets: (assets: StoryboardAssets) => void;
+  setStoryboardVoiceover: (text: string) => void;
+  /** 载入故事板项目（含素材库与旁白）。 */
+  loadStoryboardProject: (
+    project: LoadedProject,
+    assets: StoryboardAssets,
+    voiceover: string,
+  ) => void;
+
   // ---- 节点/连线动作（React Flow 绑定）----
   setNodes: (updater: CanvasNode[] | ((n: CanvasNode[]) => CanvasNode[])) => void;
   setEdges: (updater: Edge[] | ((e: Edge[]) => Edge[])) => void;
@@ -81,6 +111,8 @@ interface CanvasState {
   onConnect: (conn: Connection) => void;
   setViewport: (v: Viewport) => void;
   addNode: (node: CanvasNode) => void;
+  /** 批量添加多个节点（故事板导入用，比循环 addNode 高效）。 */
+  addNodes: (nodes: CanvasNode[]) => void;
   updateNodeData: (id: string, patch: Partial<CanvasNodeData>) => void;
   removeNode: (id: string) => void;
   addEdgeRaw: (edge: Edge) => void;
@@ -130,8 +162,15 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   dirty: false,
   saveStatus: "idle",
   loaded: false,
+  mode: "free",
+  storyboardAssets: {},
+  storyboardVoiceover: "",
 
   loadProject: (p) => {
+    // 从节点列表推断画布模式：包含 shot 节点则视为故事板
+    const hasShot = p.nodes.some(
+      (n) => (n.data as { kind?: string }).kind === "shot",
+    );
     set({
       projectId: p.id,
       name: p.name,
@@ -142,6 +181,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       dirty: false,
       saveStatus: "idle",
       selectedNodeId: null,
+      mode: hasShot ? "storyboard" : "free",
     });
     persistSession(p.id, p.name);
   },
@@ -157,6 +197,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       dirty: false,
       saveStatus: "idle",
       selectedNodeId: null,
+      mode: "free",
+      storyboardAssets: {},
+      storyboardVoiceover: "",
     });
     persistSession(id, name);
   },
@@ -173,6 +216,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       dirty: false,
       saveStatus: "idle",
       selectedNodeId: null,
+      mode: "free",
+      storyboardAssets: {},
+      storyboardVoiceover: "",
     });
     persistSession(id, "");
   },
@@ -201,6 +247,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       dirty: false,
       saveStatus: "idle",
       loaded: false,
+      mode: "free",
+      storyboardAssets: {},
+      storyboardVoiceover: "",
     });
     persistSession(null, "");
   },
@@ -210,6 +259,33 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     if (projectId) {
       set({ projectId, name });
     }
+  },
+
+  // ---- 故事板模式动作 ----
+  setMode: (mode) => set({ mode }),
+
+  setStoryboardAssets: (assets) =>
+    set({ storyboardAssets: assets, dirty: true, saveStatus: "idle" }),
+
+  setStoryboardVoiceover: (text) =>
+    set({ storyboardVoiceover: text, dirty: true, saveStatus: "idle" }),
+
+  loadStoryboardProject: (project, assets, voiceover) => {
+    set({
+      projectId: project.id,
+      name: project.name,
+      nodes: project.nodes,
+      edges: project.edges,
+      viewport: project.viewport,
+      loaded: true,
+      dirty: false,
+      saveStatus: "idle",
+      selectedNodeId: null,
+      mode: "storyboard",
+      storyboardAssets: assets,
+      storyboardVoiceover: voiceover,
+    });
+    persistSession(project.id, project.name);
   },
 
   setNodes: (updater) =>
@@ -245,6 +321,13 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     set((s) => ({
       nodes: [...s.nodes, node],
       selectedNodeId: node.id,
+      dirty: true,
+      saveStatus: "idle",
+    })),
+
+  addNodes: (newNodes) =>
+    set((s) => ({
+      nodes: [...s.nodes, ...newNodes],
       dirty: true,
       saveStatus: "idle",
     })),

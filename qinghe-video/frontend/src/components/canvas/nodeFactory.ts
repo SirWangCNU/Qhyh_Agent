@@ -10,6 +10,7 @@ import type {
   CanvasNodeData,
   CanvasNodeKind,
   ImageNodeData,
+  ShotNodeData,
 } from "@/components/canvas/types";
 import { FALLBACK_MODEL } from "@/components/canvas/types";
 
@@ -59,6 +60,16 @@ export function defaultNodeData(kind: CanvasNodeKind): CanvasNodeData {
       };
     case "image":
       return { kind: "image", imageUrl: null, label: "", index: 0 };
+    case "shot":
+      return {
+        kind: "shot",
+        shotId: "",
+        title: "新分镜",
+        visualPrompt: "",
+        narration: "",
+        duration: 3.5,
+        status: "idle",
+      };
   }
 }
 
@@ -100,4 +111,96 @@ export function makeImageNode(
     data,
   };
   return { node, data };
+}
+
+// ============================================================
+// 故事板分镜节点
+// ============================================================
+
+/** 单个分镜的导入数据（来自工坊 scriptwriter + visual_designer）。 */
+export interface ShotImport {
+  shotId: string;
+  title: string;
+  visualPrompt: string;
+  narration: string;
+  duration: number;
+  referenceImageUrl?: string;
+  referenceType?: "character" | "object" | "scene";
+}
+
+/** 从工坊 shot 数据创建 ShotNode。 */
+export function makeShotNode(
+  shot: ShotImport,
+  position: XYPosition,
+): CanvasNode {
+  const data: ShotNodeData = {
+    kind: "shot",
+    shotId: shot.shotId,
+    title: shot.title || `分镜 ${shot.shotId}`,
+    visualPrompt: shot.visualPrompt,
+    narration: shot.narration ?? "",
+    duration: shot.duration ?? 3.5,
+    referenceImageUrl: shot.referenceImageUrl,
+    referenceType: shot.referenceType,
+    status: "idle",
+  };
+  return {
+    id: makeNodeId(),
+    type: "shot",
+    position,
+    data,
+  };
+}
+
+/** 故事板自动布局参数。 */
+export interface StoryboardLayoutOptions {
+  /** 起始坐标。 */
+  startX?: number;
+  startY?: number;
+  /** 行间距（纵向排列时每个分镜的垂直间距）。 */
+  rowGap?: number;
+  /** 列间距（横向排列时每个分镜的水平间距，预留未用）。 */
+  colGap?: number;
+  /** 每行分镜数，超过则换行。 */
+  perRow?: number;
+}
+
+/**
+ * 按纵向瀑布流排列分镜节点坐标。
+ *
+ * 默认每个 ShotNode 占一行：x = startX, y = startY + index * rowGap。
+ * perRow > 1 时按网格换行排列。
+ *
+ * 返回与 shots 等长的坐标数组，顺序一致。
+ */
+export function layoutStoryboardShots(
+  count: number,
+  options: StoryboardLayoutOptions = {},
+): XYPosition[] {
+  const {
+    startX = 0,
+    startY = 0,
+    rowGap = 240,
+    colGap = 320,
+    perRow = 1,
+  } = options;
+  const positions: XYPosition[] = [];
+  for (let i = 0; i < count; i++) {
+    const row = Math.floor(i / perRow);
+    const col = i % perRow;
+    positions.push({
+      x: startX + col * colGap,
+      y: startY + row * rowGap,
+    });
+  }
+  return positions;
+}
+
+/** 批量创建 ShotNode 阵列（按 layout 排列）。 */
+export function makeShotNodes(
+  shots: ShotImport[],
+  options: StoryboardLayoutOptions = {},
+): CanvasNode[] {
+  const positions = layoutStoryboardShots(shots.length, options);
+  return shots.map((shot, i) => makeShotNode(shot, positions[i]!));
 }

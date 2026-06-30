@@ -79,14 +79,14 @@ export const NODE_META: Record<
 };
 
 // ============================================================
-// 工坊 9 步流水线定义
+// 工坊 4 步流水线定义
 // ============================================================
 
-/** 工坊步骤 key（扩展自 NodeKey，增加媒体步骤） */
-export type WorkshopStepKey = NodeKey | "consistency_images" | "image_gen" | "tts" | "compose";
+/** 工坊步骤 key（扩展自 NodeKey，增加一致性生图） */
+export type WorkshopStepKey = NodeKey | "consistency_images";
 
 /** 工坊步骤执行类型 */
-export type WorkshopStepType = "llm" | "image" | "tts" | "compose";
+export type WorkshopStepType = "llm" | "image";
 
 /** 工坊步骤配置 */
 export interface WorkshopStepConfig {
@@ -105,28 +105,22 @@ export interface WorkshopStepConfig {
   defaultAuto: boolean;
 }
 
-/** 9 步工坊流水线定义 */
+/** 4 步工坊流水线定义 */
 export const WORKSHOP_STEPS: WorkshopStepConfig[] = [
   { key: "planner", num: 1, title: "策划", emoji: "📋", kicker: "PLANNER", desc: "输入产品名 → AI 润写 → 完整策划", gridSpan: 1, description: "输入产品名称，AI 润写后生成完整策划", type: "llm", deps: [], defaultAuto: true },
   { key: "copywriter", num: 2, title: "文案", emoji: "✍️", kicker: "COPYWRITER", desc: "Hook、口播、CTA", gridSpan: 1, description: "基于策划生成 Hook、口播稿与 CTA", type: "llm", deps: ["planner"], defaultAuto: true },
   { key: "consistency_images", num: 3, title: "一致性生图", emoji: "🧬", kicker: "CONSISTENCY", desc: "人物/物品/场景参考图", gridSpan: 2, description: "生成人物设定集、物品九宫格、场景四面环视图，保证主体一致性", type: "image", deps: ["copywriter"], defaultAuto: false },
   { key: "scriptwriter", num: 4, title: "脚本", emoji: "🎬", kicker: "SCRIPTWRITER", desc: "分镜、运镜、BGM", gridSpan: 2, description: "输出完整分镜表、运镜与 BGM 建议", type: "llm", deps: ["copywriter"], defaultAuto: true },
-  { key: "visual_designer", num: 5, title: "视觉", emoji: "🎨", kicker: "VISUAL", desc: "图片/视频 Prompt", gridSpan: 1, description: "定义视觉风格并生成各镜图片 Prompt", type: "llm", deps: ["scriptwriter"], defaultAuto: true },
-  { key: "distributor", num: 6, title: "投放", emoji: "📣", kicker: "DISTRIBUTOR", desc: "标题、标签、策略", gridSpan: 1, description: "生成发布标题、话题标签与投放策略", type: "llm", deps: ["visual_designer"], defaultAuto: false },
-  { key: "image_gen", num: 7, title: "出图", emoji: "🖼️", kicker: "IMAGE GEN", desc: "逐镜生成图片素材", gridSpan: 1, description: "按视觉 Prompt 逐镜生成图片素材", type: "image", deps: ["visual_designer"], defaultAuto: false },
-  { key: "tts", num: 8, title: "配音", emoji: "🔊", kicker: "TTS", desc: "合成旁白语音", gridSpan: 1, description: "将文案合成自然语音旁白", type: "tts", deps: ["copywriter"], defaultAuto: false },
-  { key: "compose", num: 9, title: "合成", emoji: "🎞️", kicker: "COMPOSE", desc: "图片+配音→竖屏视频", gridSpan: 2, description: "图片轮播 + 配音 → 合成竖屏视频", type: "compose", deps: ["image_gen", "tts"], defaultAuto: false },
 ];
 
-/** 默认自动执行到第几步（视觉完成；新布局 num 5 = visual_designer，跳过 num 3 一致性生图） */
-export const DEFAULT_AUTO_RUN_TO = 5;
+/** 默认自动执行到第几步（脚本完成；num 4 = scriptwriter，跳过 num 3 一致性生图） */
+export const DEFAULT_AUTO_RUN_TO = 4;
 
 /** 前端路由表（hash 路由，与旧版兼容）。 */
 export const ROUTES = {
   create: "/create",
   chat: "/chat",
   workshop: "/workshop",
-  imageStudio: "/image-studio",
   canvas: "/canvas",
   agents: "/agents",
   plan: "/plan",
@@ -142,7 +136,6 @@ export const NAV_LINKS: Array<{
   { to: ROUTES.create, label: "开始创作", route: ROUTES.create },
   { to: ROUTES.chat, label: "对话创作", route: ROUTES.chat },
   { to: ROUTES.workshop, label: "分步工坊", route: ROUTES.workshop },
-  { to: ROUTES.imageStudio, label: "图像工作室", route: ROUTES.imageStudio },
   { to: ROUTES.canvas, label: "无限画布", route: ROUTES.canvas },
   { to: ROUTES.agents, label: "Agent 管理", route: ROUTES.agents },
   { to: ROUTES.assets, label: "我的资产", route: ROUTES.assets },

@@ -5,7 +5,7 @@
 注意：
 - 不用 str.format（模板含 JSON/布局描述的大括号会冲突）
 - 不用 config.get_system_prompt（会转义所有大括号破坏布局描述）
-- 直接读取 .md 原文，与 image_studio/prompt_builder.py 同模式
+- 直接读取 .md 原文
 """
 
 from __future__ import annotations

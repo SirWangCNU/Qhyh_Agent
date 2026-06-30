@@ -26,6 +26,7 @@ import { ReferenceImageNode } from "@/components/canvas/nodes/ReferenceImageNode
 import { PromptNode } from "@/components/canvas/nodes/PromptNode";
 import { GenerateNode } from "@/components/canvas/nodes/GenerateNode";
 import { ImageNode } from "@/components/canvas/nodes/ImageNode";
+import { ShotNode } from "@/components/canvas/nodes/ShotNode";
 
 /** 节点类型映射（必须定义在组件外，避免每次渲染重建触发 React Flow 警告）。 */
 const nodeTypes = {
@@ -33,6 +34,7 @@ const nodeTypes = {
   prompt: PromptNode,
   generate: GenerateNode,
   image: ImageNode,
+  shot: ShotNode,
 };
 
 interface CanvasFlowProps {
@@ -106,6 +108,8 @@ export function CanvasFlow({ onDrop, onDragOver, onInit }: CanvasFlowProps) {
                 return "#f59e0b";
               case "image":
                 return "#a855f7";
+              case "shot":
+                return "#f97316";
               default:
                 return "#94a3b8";
             }

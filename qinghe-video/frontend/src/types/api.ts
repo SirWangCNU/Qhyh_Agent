@@ -383,32 +383,6 @@ export interface VideoMvpResponse {
 }
 
 // ============================================================
-// 图像工作室（multipart/form）
-// ============================================================
-
-export type ImageStudioImageType = "person" | "product";
-
-export interface ImageStudioVariant {
-  variant_id: number;
-  dimension: string;
-  dimension_label: string;
-  prompt: string;
-  negative_prompt?: string;
-  image_url?: string;
-  b64_json?: string;
-  error?: string;
-}
-
-export interface ImageStudioResponse {
-  status: string;
-  grid_url?: string;
-  consistency_key: string;
-  subject: string;
-  image_type: ImageStudioImageType;
-  variants: ImageStudioVariant[];
-}
-
-// ============================================================
 // 一致性生图（人物/物品/场景，multipart/form，参考图可选）
 // ============================================================
 
@@ -492,4 +466,89 @@ export interface TopicRequest {
 export interface TopicResponse {
   status: string;
   topics: TopicCandidate[];
+}
+
+// ============================================================
+// 故事板（Storyboard）— 工坊 → 画布 导入 payload 与画布 API
+// ============================================================
+
+/** 工坊导出的单个分镜数据（以 scriptwriter.shots 为基准，存在 visual_output 时取其 shot_prompts）。 */
+export interface StoryboardShot {
+  shot_id: string;
+  title: string;
+  visual_prompt: string;
+  narration: string;
+  duration: number;
+  /** 用户在画布上为该 shot 绑定的参考图 URL（可选）。 */
+  reference_image_url?: string;
+  reference_type?: "character" | "object" | "scene";
+}
+
+/** 工坊 → 画布的完整故事板 payload。 */
+export interface StoryboardPayload {
+  shots: StoryboardShot[];
+  /** 人物/物品/场景一致性参考图 URL（来自工坊第 3 步）。 */
+  character_ref?: string;
+  object_ref?: string;
+  scene_ref?: string;
+  /** 整体旁白文本（来自 copywriter.full_script）。 */
+  voiceover_text?: string;
+}
+
+/** 后端 ShotInput（与 src/canvas/models.py 对齐）。 */
+export interface ShotInputDTO {
+  shot_id: string;
+  title: string;
+  visual_prompt: string;
+  narration: string;
+  duration: number;
+  reference_image_url?: string;
+  reference_type?: "character" | "object" | "scene";
+  node_id?: string;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/generate 请求体。 */
+export interface StoryboardGenerateRequestDTO {
+  shots: ShotInputDTO[];
+  character_ref?: string;
+  object_ref?: string;
+  scene_ref?: string;
+  size?: string;
+  model?: string;
+  concurrency?: number;
+}
+
+/** 后端 GenerateResult（与单生成节点共用）。 */
+export interface StoryboardShotResultDTO {
+  node_id: string;
+  status: "idle" | "running" | "done" | "error";
+  result_image_url: string | null;
+  error: string | null;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/generate 响应。 */
+export interface StoryboardGenerateResponseDTO {
+  results: StoryboardShotResultDTO[];
+}
+
+/** 单个分镜的合成输入。 */
+export interface ShotResultInputDTO {
+  shot_id: string;
+  image_url: string;
+  narration: string;
+  duration: number;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/compose 请求体。 */
+export interface StoryboardComposeRequestDTO {
+  shot_results: ShotResultInputDTO[];
+  voiceover_text?: string;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/compose 响应。 */
+export interface StoryboardComposeResponseDTO {
+  status: string;
+  video_url: string | null;
+  audio_url: string | null;
+  error: string | null;
 }

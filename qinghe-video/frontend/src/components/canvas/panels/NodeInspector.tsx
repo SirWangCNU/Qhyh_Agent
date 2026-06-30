@@ -25,12 +25,14 @@ import {
   GENERATE_STATUS_META,
   MODE_OPTIONS,
   REF_TYPE_OPTIONS,
+  SHOT_REF_TYPE_OPTIONS,
   SIZE_OPTIONS,
   type CanvasNodeData,
   type GenerateNodeData,
   type ImageNodeData,
   type PromptNodeData,
   type ReferenceImageNodeData,
+  type ShotNodeData,
 } from "@/components/canvas/types";
 import { PromptMentionTextarea } from "@/components/canvas/shared/PromptMentionTextarea";
 
@@ -138,6 +140,15 @@ export function NodeInspector() {
             <ImageEditor
               data={node.data as ImageNodeData}
               backend={BACKEND}
+            />
+          )}
+
+          {(node.data as { kind: string }).kind === "shot" && (
+            <ShotEditor
+              key={node.id}
+              id={node.id}
+              data={node.data as ShotNodeData}
+              updateNodeData={updateNodeData}
             />
           )}
         </>
@@ -455,6 +466,161 @@ function ImageEditor({
         ) : (
           <p className="text-xs text-muted-foreground">暂无结果图</p>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function ShotEditor({
+  id,
+  data,
+  updateNodeData,
+}: {
+  id: string;
+  data: ShotNodeData;
+  updateNodeData: UpdateFn;
+}) {
+  const statusMeta = GENERATE_STATUS_META[data.status] ?? GENERATE_STATUS_META.idle;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">🎬 分镜</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] font-medium text-muted-foreground">
+            状态
+          </span>
+          <Badge variant={statusMeta.variant} className="text-[10px]">
+            {statusMeta.label}
+          </Badge>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium text-muted-foreground">
+            镜号标题
+          </label>
+          <Input
+            value={data.title}
+            onChange={(e) => updateNodeData(id, { title: e.target.value })}
+            className="h-8 text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium text-muted-foreground">
+            画面描述 / 提示词
+          </label>
+          <Textarea
+            value={data.visualPrompt}
+            onChange={(e) =>
+              updateNodeData(id, { visualPrompt: e.target.value })
+            }
+            placeholder="本镜画面描述…"
+            className="h-24 resize-none text-xs"
+          />
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium text-muted-foreground">
+            旁白
+          </label>
+          <Textarea
+            value={data.narration}
+            onChange={(e) => updateNodeData(id, { narration: e.target.value })}
+            placeholder="本镜旁白文本…"
+            className="h-16 resize-none text-xs"
+          />
+        </div>
+        <div className="flex gap-2">
+          <div className="flex-1 space-y-1">
+            <label className="text-[11px] font-medium text-muted-foreground">
+              时长(秒)
+            </label>
+            <Input
+              type="number"
+              min={0.1}
+              step={0.1}
+              value={data.duration}
+              onChange={(e) =>
+                updateNodeData(id, {
+                  duration: Math.max(0.1, Number(e.target.value) || 3.5),
+                })
+              }
+              className="h-8 text-xs"
+            />
+          </div>
+          <div className="flex-1 space-y-1">
+            <label className="text-[11px] font-medium text-muted-foreground">
+              参考类型
+            </label>
+            <Select
+              value={data.referenceType ?? ""}
+              onValueChange={(v) =>
+                updateNodeData(id, {
+                  referenceType: (v || undefined) as
+                    | ShotNodeData["referenceType"]
+                    | undefined,
+                })
+              }
+            >
+              <SelectTrigger className="h-8 text-xs">
+                <SelectValue placeholder="自动" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="" className="text-xs">
+                  自动
+                </SelectItem>
+                {SHOT_REF_TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value} className="text-xs">
+                    <span
+                      className="mr-1.5 inline-block h-2 w-2 rounded-full"
+                      style={{ backgroundColor: o.color }}
+                    />
+                    {o.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium text-muted-foreground">
+            参考图 URL（可选）
+          </label>
+          <Input
+            value={data.referenceImageUrl ?? ""}
+            onChange={(e) =>
+              updateNodeData(id, {
+                referenceImageUrl: e.target.value || undefined,
+              })
+            }
+            placeholder="/outputs/upload/xxx.jpg"
+            className="h-8 text-xs"
+          />
+        </div>
+        {data.resultImageUrl && (
+          <img
+            src={data.resultImageUrl}
+            alt="结果图"
+            className="h-32 w-full rounded border object-contain"
+          />
+        )}
+        {data.error && (
+          <p className="rounded bg-destructive/10 px-2 py-1 text-[11px] text-destructive">
+            {data.error}
+          </p>
+        )}
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 w-full text-xs"
+          onClick={() =>
+            updateNodeData(id, {
+              status: "idle",
+              error: undefined,
+            })
+          }
+        >
+          重置状态
+        </Button>
       </CardContent>
     </Card>
   );

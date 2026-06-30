@@ -115,7 +115,6 @@ export function WorkshopStepCard({
             status={status}
             output={output}
             errorMsg={errorMsg}
-            mediaResults={store.mediaResults}
           />
         )}
       </div>

@@ -19,14 +19,12 @@ interface WorkshopStepListProps {
 
 /**
  * 工坊步骤网格容器：
- * 将 8 个步骤以卡片网格平铺，每个卡片内部承载自身内容与操作。
+ * 将 4 个步骤以卡片网格平铺，每个卡片内部承载自身内容与操作。
  *
  * 桌面端布局：
  * - Step 1 | Step 2
  * - Step 3（全宽）
- * - Step 4 | Step 5
- * - Step 6 | Step 7
- * - Step 8（全宽）
+ * - Step 4（全宽）
  */
 export function WorkshopStepList({
   onStepClick,

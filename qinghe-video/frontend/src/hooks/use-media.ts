@@ -3,8 +3,6 @@ import { apiFetch, apiPost, getAuthToken } from "@/lib/api";
 import type {
   ConsistencyImageResponse,
   ConsistencyImageType,
-  ImageStudioImageType,
-  ImageStudioResponse,
   ImageGenerationResponse,
   ImageGenerationRequest,
   TTSRequest,
@@ -14,50 +12,6 @@ import type {
   VideoMvpRequest,
   VideoMvpResponse,
 } from "@/types/api";
-
-/**
- * 九宫格导演板 hook（POST /api/image-studio/generate，multipart/form）。
- *
- * 字段：image_type、subject、style_preference?、size?、reference_image(File)
- * 响应：{ status, grid_url?, consistency_key, subject, image_type, variants[9] }
- */
-export function useImageStudioGenerate() {
-  return useMutation({
-    mutationFn: async (params: {
-      imageType: ImageStudioImageType;
-      subject: string;
-      stylePreference?: string;
-      size?: string;
-      referenceImage: File;
-    }) => {
-      const fd = new FormData();
-      fd.append("image_type", params.imageType);
-      fd.append("subject", params.subject);
-      if (params.stylePreference) fd.append("style_preference", params.stylePreference);
-      if (params.size) fd.append("size", params.size);
-      fd.append("reference_image", params.referenceImage);
-
-      const token = getAuthToken();
-      const backend = (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/+$/, "");
-      const resp = await fetch(`${backend}/api/image-studio/generate`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd,
-      });
-      if (!resp.ok) {
-        let detail = `HTTP ${resp.status}`;
-        try {
-          const data = await resp.json();
-          if (data?.detail) detail = String(data.detail);
-        } catch {
-          /* ignore */
-        }
-        throw new Error(detail);
-      }
-      return (await resp.json()) as ImageStudioResponse;
-    },
-  });
-}
 
 /**
  * 一致性生图 hook（POST /api/consistency-images/generate，multipart/form）。

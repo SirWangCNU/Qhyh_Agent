@@ -1,25 +1,37 @@
-import { RotateCcw } from "lucide-react";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { RotateCcw, LayoutGrid, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRunAgentStep } from "@/hooks/use-agents";
 import { useTextPolish } from "@/hooks/use-text-polish";
 import { useTopicGeneration } from "@/hooks/use-topic-generation";
-import { useGenerateImage, useGenerateTTS, useComposeVideo } from "@/hooks/use-media";
+import { useCreateCanvasProject } from "@/hooks/use-canvas";
 import {
   WORKSHOP_STEPS,
   DEFAULT_AUTO_RUN_TO,
+  ROUTES,
   type WorkshopStepKey,
   type WorkshopStepConfig,
   type NodeKey,
 } from "@/lib/constants";
 import { useWorkshopStore } from "@/stores/workshop-store";
+import { useCanvasStore } from "@/stores/canvas-store";
+import { useCanvasStoryboard } from "@/components/canvas/hooks/useCanvasStoryboard";
 import { WorkshopStepList } from "@/components/workshop/WorkshopStepList";
-import type { CopywriterOutput } from "@/types/api";
+import type {
+  CopywriterOutput,
+  ScriptwriterOutput,
+  VisualOutput,
+  ShotPrompt,
+  StoryboardPayload,
+  StoryboardShot,
+} from "@/types/api";
 
 /**
  * 分步 Agent 工坊（#/workshop）— Auto Video Agent 模式。
  *
  * Step1 极简输入嵌入 Step 1 卡片：产品名 + 一句话创意 → AI 润写 → 完整字段。
- * 9 步流水线以卡片网格平铺：策划→文案→一致性生图→脚本→视觉→投放→出图→配音→合成
+ * 4 步流水线以卡片网格平铺：策划→文案→一致性生图→脚本
  * 支持复选框自动批量执行 + 手动单步「运行此步」续跑。
  */
 export function WorkshopPage() {
@@ -29,9 +41,11 @@ export function WorkshopPage() {
   const runAgentStep = useRunAgentStep();
   const textPolish = useTextPolish();
   const topicGeneration = useTopicGeneration();
-  const generateImage = useGenerateImage();
-  const generateTTS = useGenerateTTS();
-  const composeVideo = useComposeVideo();
+  const createCanvasProject = useCreateCanvasProject();
+  const storyboard = useCanvasStoryboard();
+  const navigate = useNavigate();
+  const [storyboardExporting, setStoryboardExporting] = useState(false);
+  const [storyboardError, setStoryboardError] = useState<string | null>(null);
 
   /** 校验表单必填字段 */
   function validateForm(): string | null {
@@ -155,16 +169,10 @@ export function WorkshopPage() {
         case "image":
           if (key === "consistency_images") {
             await execConsistencyImages();
-          } else {
-            await execImageGen();
           }
           break;
-        case "tts":
-          await execTTS();
-          break;
-        case "compose":
-          await execCompose();
-          break;
+        default:
+          throw new Error(`不支持的步骤类型: ${cfg.type}`);
       }
       store.setStepStatus(key, "done");
       return true;
@@ -191,7 +199,7 @@ export function WorkshopPage() {
     store.setStepOutput(key, resp.output);
     store.setWorkshopState(resp.state);
 
-    // 文案步骤完成后，把生成的一致性规划同步写入一致性参考，供 visual_designer 注入
+    // 文案步骤完成后，把生成的一致性规划同步写入一致性参考，供画布/后续视觉生成使用
     if (key === "copywriter") {
       const plan = resp.state?.copywriter_output?.consistency_plan;
       if (plan?.character_subject) {
@@ -204,52 +212,6 @@ export function WorkshopPage() {
         store.setConsistencyReferences("scene", plan.scene_subject);
       }
     }
-  }
-
-  /** 出图：逐镜生成图片 */
-  async function execImageGen() {
-    const shotPrompts = store.workshopState.visual_output?.shot_prompts ?? [];
-    if (shotPrompts.length === 0) {
-      throw new Error("视觉 Agent 未生成 shot_prompts");
-    }
-    const prompts = shotPrompts.slice(0, 4);
-
-    // B1 联动：开启且第 3 步已生成人物参考图时，透传给后端走图生图
-    const characterRefUrl = store.imageGenUseCharacterRef
-      ? store.mediaResults.characterImage?.url ?? null
-      : null;
-
-    // 初始化为 loading
-    const initial: Array<{ url: string; prompt: string; status: "loading" | "done" | "error" }> =
-      prompts.map((p) => ({
-        url: "",
-        prompt: p.prompt,
-        status: "loading",
-      }));
-    store.setMediaResults({ images: initial });
-
-    const results = [...initial];
-    for (let i = 0; i < prompts.length; i++) {
-      try {
-        const resp = await generateImage.mutateAsync({
-          prompt: prompts[i].prompt,
-          negative_prompt: prompts[i].negative_prompt,
-          size: "1920x1920",
-          n: 1,
-          ...(characterRefUrl ? { reference_image_path: characterRefUrl } : {}),
-        });
-        results[i] = {
-          url: resp.images[0]?.url ?? "",
-          prompt: prompts[i].prompt,
-          status: "done",
-        };
-      } catch {
-        results[i] = { url: "", prompt: prompts[i].prompt, status: "error" };
-      }
-      store.setMediaResults({ images: [...results] });
-    }
-
-    store.setStepOutput("image_gen", { count: results.length, images: results });
   }
 
   /**
@@ -272,52 +234,7 @@ export function WorkshopPage() {
     });
   }
 
-  /** 配音：TTS 合成 */
-  async function execTTS() {
-    const text = extractVoiceoverText();
-    if (!text) {
-      throw new Error("文案 Agent 未生成旁白文本");
-    }
-    const resp = await generateTTS.mutateAsync({ text });
-    store.setMediaResults({
-      audioUrl: resp.audio_url,
-      audioPath: resp.audio_path,
-    });
-    store.setStepOutput("tts", { audioUrl: resp.audio_url, text });
-  }
-
-  /** 合成：图片 + 配音 → 视频，完成后自动生成报告 */
-  async function execCompose() {
-    const imageUrls = store.mediaResults.images
-      .filter((i) => i.status === "done" && i.url)
-      .map((i) => i.url);
-    const audioPath = store.mediaResults.audioPath;
-    if (imageUrls.length === 0) throw new Error("请先完成「出图」步骤");
-    if (!audioPath) throw new Error("请先完成「配音」步骤");
-
-    const resp = await composeVideo.mutateAsync({
-      image_urls: imageUrls,
-      audio_path: audioPath,
-    });
-    store.setMediaResults({ videoUrl: resp.video_url });
-    store.setStepOutput("compose", { videoUrl: resp.video_url });
-
-    // 合成完成后自动生成报告（非阻塞）
-    try {
-      const reportResp = await runAgentStep.mutateAsync({
-        step: "report_generator",
-        input: store.form,
-        state: store.workshopState,
-      });
-      if (reportResp.status === "success") {
-        store.setWorkshopState(reportResp.state);
-      }
-    } catch {
-      /* 报告生成失败不阻塞 */
-    }
-  }
-
-  /** 自动执行：从第一个未完成步骤执行到第 5 步（视觉/投放之后，出图/配音/合成手动触发） */
+  /** 自动执行：从第一个未完成步骤执行到第 4 步（脚本完成，跳过一致性生图） */
   async function startAutoRun() {
     const formError = validateForm();
     if (formError) {
@@ -344,6 +261,90 @@ export function WorkshopPage() {
     await executeStep(key);
   }
 
+  /**
+   * 构造从工坊到画布的故事板 payload。
+   *
+   * 以 scriptwriter.shots 为基准（提供镜号、旁白、时长、画面描述）。
+   * 若存在 visual_output.shot_prompts（历史数据），优先按 shot_id 匹配更精细的画面提示词；
+   * 否则直接回退到 scriptwriter 中的 visual_description。
+   *
+   * 返回 null 表示数据不完整（调用方应禁用按钮）。
+   */
+  function buildStoryboardPayload(): StoryboardPayload | null {
+    const sw = store.workshopState.scriptwriter_output as
+      | ScriptwriterOutput
+      | undefined;
+    if (!sw?.shots?.length) return null;
+
+    const vo = store.workshopState.visual_output as VisualOutput | undefined;
+    const promptMap = vo?.shot_prompts?.length
+      ? new Map(vo.shot_prompts.map((p) => [p.shot_id, p]))
+      : new Map<string, ShotPrompt>();
+    const fallbackPrompts = vo?.shot_prompts ?? [];
+
+    const shots: StoryboardShot[] = sw.shots.map((s, idx) => {
+      const sp = promptMap.get(s.shot_id) ?? fallbackPrompts[idx];
+      return {
+        shot_id: s.shot_id,
+        title: `分镜 ${idx + 1}`,
+        visual_prompt: sp?.prompt ?? s.visual_description ?? "",
+        narration: s.voiceover ?? "",
+        duration: s.duration_seconds ?? 3.5,
+      };
+    });
+
+    const m = store.mediaResults;
+    return {
+      shots,
+      character_ref: m.characterImage?.url ?? undefined,
+      object_ref: m.objectImage?.url ?? undefined,
+      scene_ref: m.sceneImage?.url ?? undefined,
+      voiceover_text: extractVoiceoverText() || undefined,
+    };
+  }
+
+  /**
+   * 一键将工坊分镜导出到无限画布故事板模式。
+   *
+   * 流程：构造 payload → 创建新画布项目 → loadProject → loadFromWorkshop（追加 ShotNode 阵列、设置素材库与旁白）→ 跳转 /canvas。
+   */
+  async function handleExportToCanvas(): Promise<void> {
+    const payload = buildStoryboardPayload();
+    if (!payload) {
+      setStoryboardError("请先完成「脚本」步骤");
+      return;
+    }
+    setStoryboardExporting(true);
+    setStoryboardError(null);
+    try {
+      const res = await createCanvasProject.mutateAsync({
+        name: `故事板 ${store.form.product_name || ""} ${new Date().toLocaleString("zh-CN", { hour12: false })}`.trim(),
+        nodes: [],
+        edges: [],
+        viewport: { x: 0, y: 0, zoom: 1 },
+      });
+      const canvasStore = useCanvasStore.getState();
+      canvasStore.loadProject({
+        id: res.id,
+        name: res.name,
+        nodes: res.nodes,
+        edges: res.edges,
+        viewport: res.viewport,
+      });
+      storyboard.loadFromWorkshop(payload);
+      navigate(ROUTES.canvas);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setStoryboardError(`导出失败：${msg}`);
+    } finally {
+      setStoryboardExporting(false);
+    }
+  }
+
+  // 故事板导出按钮显示条件：脚本步骤已完成且 payload 可构造
+  const canExportStoryboard =
+    store.steps.scriptwriter === "done" && !!buildStoryboardPayload();
+
   return (
     <section className="container-app py-10">
       <div className="module__head">
@@ -353,23 +354,72 @@ export function WorkshopPage() {
               <span className="num">04</span>
               分步 Agent 工坊
             </span>
-            <h2 className="section-title">把创作拆成九道农事工序</h2>
+            <h2 className="section-title">把创作拆成四道农事工序</h2>
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              if (confirm("确定重置所有步骤？")) store.reset();
-            }}
-            disabled={store.isStepRunning}
-          >
-            <RotateCcw size={14} /> 重置
-          </Button>
+          <div className="flex items-center gap-2">
+            {/* 常驻入口：随时进入无限画布自由创作 / 故事板模式 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate(ROUTES.canvas)}
+              title="进入无限画布：拖拽参考图、撰写提示词、连线生成；故事板模式下可批量出图与一键合成视频"
+            >
+              <LayoutGrid size={14} /> 无限画布
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                if (confirm("确定重置所有步骤？")) store.reset();
+              }}
+              disabled={store.isStepRunning}
+            >
+              <RotateCcw size={14} /> 重置
+            </Button>
+          </div>
         </div>
         <p className="section-desc">
-          选题确认后点击开始执行，系统自动跑完前 5 步；后续出图、配音、合成可手动逐步触发。
+          选题确认后点击开始执行，系统自动跑完前 4 步（跳过一致性生图）。
         </p>
       </div>
+
+      {/* 故事板导出条：脚本完成且故事板数据完整后展示，一键把分镜导入无限画布二次创作 */}
+      {canExportStoryboard && (
+        <div className="mt-6 flex flex-col gap-2 rounded-lg border border-orange-200 bg-orange-50/60 p-3 dark:border-orange-900/40 dark:bg-orange-950/20 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-2">
+            <LayoutGrid className="mt-0.5 h-4 w-4 shrink-0 text-orange-600 dark:text-orange-400" />
+            <div className="text-xs">
+              <div className="font-medium text-foreground">
+                脚本已就绪 — 可进入无限画布故事板模式
+              </div>
+              <div className="mt-0.5 text-muted-foreground">
+                将分镜阵列、人物/物品/场景参考图与旁白一键导入画布，支持拖拽替换、批量出图、一键合成视频。
+              </div>
+            </div>
+          </div>
+          <Button
+            size="sm"
+            className="shrink-0"
+            disabled={storyboardExporting || store.isStepRunning}
+            onClick={() => void handleExportToCanvas()}
+          >
+            {storyboardExporting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> 导出中
+              </>
+            ) : (
+              <>
+                <LayoutGrid size={14} /> 在画布中编辑故事板
+              </>
+            )}
+          </Button>
+        </div>
+      )}
+      {storyboardError && (
+        <p className="mt-2 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">
+          {storyboardError}
+        </p>
+      )}
 
       <div className="mt-8 space-y-5">
         {/* 步骤卡片网格 */}

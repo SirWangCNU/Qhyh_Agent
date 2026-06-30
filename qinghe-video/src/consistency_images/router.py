@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["consistency-images"])
 
-# 允许的参考图 MIME 类型（与 image_studio/router.py 一致）
+# 允许的参考图 MIME 类型
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/jpg", "image/png", "image/webp"}
 
 

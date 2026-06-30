@@ -14,7 +14,7 @@ import {
 } from "@/lib/constants";
 
 /**
- * 工坊 9 步流水线状态管理。
+ * 工坊 4 步流水线状态管理。
  *
  * 独立于 pipeline-store（后者绑定 SSE 流式生成，仅 6 个 LLM 节点）。
  * 状态自动持久化到 sessionStorage，刷新或路由切换后可恢复。
@@ -22,17 +22,7 @@ import {
 
 export type WorkshopStepStatus = "pending" | "running" | "done" | "error";
 
-export interface WorkshopImage {
-  url: string;
-  prompt: string;
-  status: "loading" | "done" | "error";
-}
-
 export interface WorkshopMediaResults {
-  images: WorkshopImage[];
-  audioUrl: string | null;
-  audioPath: string | null;
-  videoUrl: string | null;
   /** 一致性生图（第 3 步）三类结果，独立存储便于子卡片单独更新。 */
   characterImage: ConsistencyImageSlot | null;
   objectImage: ConsistencyImageSlot | null;
@@ -62,9 +52,6 @@ interface WorkshopState {
   /** 是否有步骤正在执行。 */
   isStepRunning: boolean;
 
-  /** 出图步骤是否使用人物参考图（图生图，B1 联动）。默认关闭。 */
-  imageGenUseCharacterRef: boolean;
-
   /** 产品信息表单。 */
   form: UserInput;
 
@@ -87,14 +74,12 @@ interface WorkshopState {
   setMediaResults: (results: Partial<WorkshopMediaResults>) => void;
   /** 单独更新某一类一致性图（character/object/scene），避免浅合并覆盖其他类。 */
   setConsistencyImage: (type: ConsistencyImageType, slot: ConsistencyImageSlot | null) => void;
-  /** 把某类一致性主体描述写入 workshopState.consistency_references，供 visual_designer 注入。 */
+  /** 把某类一致性主体描述写入 workshopState.consistency_references，供画布故事板注入。 */
   setConsistencyReferences: (type: ConsistencyImageType, subject: string) => void;
   setAutoRunToStep: (step: number) => void;
   setCurrentStep: (key: WorkshopStepKey) => void;
   setAutoRunning: (running: boolean) => void;
   setStepRunning: (running: boolean) => void;
-  /** 设置出图步骤是否使用人物参考图。 */
-  setImageGenUseCharacterRef: (v: boolean) => void;
   setForm: (form: UserInput) => void;
   setOneLiner: (v: string) => void;
   setTopics: (topics: TopicCandidate[]) => void;
@@ -126,10 +111,6 @@ const DEFAULT_FORM: UserInput = {
 };
 
 const DEFAULT_MEDIA: WorkshopMediaResults = {
-  images: [],
-  audioUrl: null,
-  audioPath: null,
-  videoUrl: null,
   characterImage: null,
   objectImage: null,
   sceneImage: null,
@@ -145,7 +126,6 @@ const DEFAULT_STATE = {
   currentStep: "planner" as WorkshopStepKey,
   isAutoRunning: false,
   isStepRunning: false,
-  imageGenUseCharacterRef: false,
   form: { ...DEFAULT_FORM },
   oneLiner: "",
   topics: [],
@@ -164,7 +144,6 @@ function persist(state: WorkshopState) {
       mediaResults: state.mediaResults,
       autoRunToStep: state.autoRunToStep,
       currentStep: state.currentStep,
-      imageGenUseCharacterRef: state.imageGenUseCharacterRef,
       form: state.form,
       oneLiner: state.oneLiner,
       topics: state.topics,
@@ -258,10 +237,6 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
 
   setAutoRunning: (running) => set({ isAutoRunning: running }),
   setStepRunning: (running) => set({ isStepRunning: running }),
-  setImageGenUseCharacterRef: (v) => {
-    set({ imageGenUseCharacterRef: v });
-    persist(get());
-  },
 
   setForm: (form) => {
     set({ form });
@@ -325,7 +300,6 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
         mediaResults: { ...DEFAULT_MEDIA, ...(snapshot.mediaResults ?? {}) },
         autoRunToStep: snapshot.autoRunToStep ?? DEFAULT_AUTO_RUN_TO,
         currentStep: snapshot.currentStep ?? "planner",
-        imageGenUseCharacterRef: snapshot.imageGenUseCharacterRef ?? false,
         form: { ...DEFAULT_FORM, ...(snapshot.form ?? {}) },
         oneLiner: snapshot.oneLiner ?? "",
         topics: snapshot.topics ?? [],

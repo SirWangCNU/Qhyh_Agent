@@ -3,7 +3,7 @@
 - 有参考图 → 图生图（payload 带 image 字段）
 - 无参考图 → 纯文生图（payload 不带 image 字段）
 
-复用 src/image_studio/image_variants.py 的 encode_upload_to_b64 转换参考图。
+encode_upload_to_b64 把上传参考图转为 data URI base64。
 """
 
 from __future__ import annotations
@@ -15,9 +15,28 @@ import time
 import httpx
 
 from src.config import PROJECT_ROOT, settings
-from src.image_studio.image_variants import encode_upload_to_b64  # 复用
 
 logger = logging.getLogger(__name__)
+
+
+def encode_upload_to_b64(file_bytes: bytes, content_type: str) -> str:
+    """把上传文件字节转为 data URI base64 格式。
+
+    Args:
+        file_bytes: 文件原始字节
+        content_type: MIME 类型，如 image/png、image/jpeg
+
+    Returns:
+        str: data:image/<format>;base64,<编码>
+    """
+    fmt = "jpeg"
+    if "/" in content_type:
+        fmt = content_type.split("/", 1)[1].lower()
+    # doubao-seedream 要求格式名小写，且不支持 jpg（用 jpeg）
+    if fmt == "jpg":
+        fmt = "jpeg"
+    encoded = base64.b64encode(file_bytes).decode("ascii")
+    return f"data:image/{fmt};base64,{encoded}"
 
 _OUTPUT_DIR = PROJECT_ROOT / "outputs" / "image"
 

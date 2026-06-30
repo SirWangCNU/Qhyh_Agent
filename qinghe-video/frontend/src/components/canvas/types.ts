@@ -16,7 +16,18 @@ export type GenerateStatus = "idle" | "running" | "done" | "error";
 export type GenerateMode = "image" | "video";
 
 /** 画布节点种类。 */
-export type CanvasNodeKind = "referenceImage" | "prompt" | "generate" | "image";
+export type CanvasNodeKind =
+  | "referenceImage"
+  | "prompt"
+  | "generate"
+  | "image"
+  | "shot";
+
+/** 故事板分镜参考图类型（与工坊一致性图对齐）。 */
+export type ShotRefType = "character" | "object" | "scene";
+
+/** 画布模式：自由创作 / 故事板。 */
+export type CanvasMode = "free" | "storyboard";
 
 /** 参考图节点数据。 */
 export interface ReferenceImageNodeData {
@@ -66,12 +77,39 @@ export interface ImageNodeData {
   [key: string]: unknown;
 }
 
+/** 分镜节点数据（故事板模式专用）。 */
+export interface ShotNodeData {
+  kind: "shot";
+  /** 来自 scriptwriter 的 shot id。 */
+  shotId: string;
+  /** 镜号标题，如「分镜 1」。 */
+  title: string;
+  /** 画面描述 / 图片提示词。 */
+  visualPrompt: string;
+  /** 本镜旁白文本。 */
+  narration: string;
+  /** 本镜时长（秒）。 */
+  duration: number;
+  /** 当前 shot 绑定的参考图 URL（优先于 referenceType 回退）。 */
+  referenceImageUrl?: string;
+  /** 参考图类型，决定回退到哪类一致性图。 */
+  referenceType?: ShotRefType;
+  /** 生成状态。 */
+  status: GenerateStatus;
+  /** 生成成功后的结果图 URL。 */
+  resultImageUrl?: string;
+  /** 生成失败时的错误信息。 */
+  error?: string;
+  [key: string]: unknown;
+}
+
 /** 画布节点数据联合类型。 */
 export type CanvasNodeData =
   | ReferenceImageNodeData
   | PromptNodeData
   | GenerateNodeData
-  | ImageNodeData;
+  | ImageNodeData
+  | ShotNodeData;
 
 export type CanvasNode = Node<CanvasNodeData>;
 export type CanvasEdge = Edge;
@@ -119,6 +157,18 @@ export const TOOLBAR_ITEMS: {
   { kind: "prompt", label: "提示词", emoji: "✍️" },
   { kind: "generate", label: "生成", emoji: "⚡" },
   { kind: "image", label: "结果图", emoji: "📷" },
+  { kind: "shot", label: "分镜", emoji: "🎬" },
+];
+
+/** 分镜参考图类型选项（用于 ShotNode 属性面板）。 */
+export const SHOT_REF_TYPE_OPTIONS: {
+  value: ShotRefType;
+  label: string;
+  color: string;
+}[] = [
+  { value: "character", label: "人物", color: "#3b82f6" },
+  { value: "object", label: "物品", color: "#f59e0b" },
+  { value: "scene", label: "场景", color: "#10b981" },
 ];
 
 /** 生成状态 → Badge 配置。 */
@@ -133,8 +183,11 @@ export const GENERATE_STATUS_META: Record<
 };
 
 /**
- * 连线合法性：仅允许参考图/提示词 → 生成；生成 → 结果图。
- * srcKind / tgtKind 取自节点 data.kind。
+ * 连线合法性：
+ * - 参考图/提示词 → 生成
+ * - 生成 → 结果图
+ * - 参考图/提示词 → 分镜（故事板模式：把素材连到分镜上）
+ * - 分镜 → 生成（分镜可作为生成节点的提示词来源）
  */
 export function isValidConnection(
   srcKind: string,
@@ -142,11 +195,17 @@ export function isValidConnection(
 ): boolean {
   if (
     tgtKind === "generate" &&
-    (srcKind === "referenceImage" || srcKind === "prompt")
+    (srcKind === "referenceImage" || srcKind === "prompt" || srcKind === "shot")
   ) {
     return true;
   }
   if (tgtKind === "image" && srcKind === "generate") {
+    return true;
+  }
+  if (
+    tgtKind === "shot" &&
+    (srcKind === "referenceImage" || srcKind === "prompt")
+  ) {
     return true;
   }
   return false;

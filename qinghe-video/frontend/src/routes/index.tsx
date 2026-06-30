@@ -4,7 +4,6 @@ import { CanvasLayout } from "@/components/layout/CanvasLayout";
 import { CreatePage } from "@/pages/CreatePage";
 import { ChatPage } from "@/pages/ChatPage";
 import { WorkshopPage } from "@/pages/WorkshopPage";
-import { ImageStudioPage } from "@/pages/ImageStudioPage";
 import { CanvasPage } from "@/pages/CanvasPage";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { PlanPage } from "@/pages/PlanPage";
@@ -26,7 +25,6 @@ export const router = createHashRouter([
       { path: "create", element: <CreatePage /> },
       { path: "chat", element: <ChatPage /> },
       { path: "workshop", element: <WorkshopPage /> },
-      { path: "image-studio", element: <ImageStudioPage /> },
       { path: "agents", element: <AgentsPage /> },
       { path: "plan", element: <PlanPage /> },
       { path: "assets", element: <AssetsPage /> },

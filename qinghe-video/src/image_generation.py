@@ -129,10 +129,8 @@ async def generate_image(request: ImageGenerationRequest) -> list[ImageGeneratio
     if request.reference_image_path:
         resolved = _resolve_reference_image(request.reference_image_path)
         if resolved is not None:
-            from src.image_studio.image_variants import encode_upload_to_b64
-
             ref_bytes, mime = resolved
-            payload["image"] = encode_upload_to_b64(ref_bytes, mime)
+            payload["image"] = _encode_to_b64(ref_bytes, mime)
 
     base_url = settings.APILINK_API_BASE_URL.rstrip("/")
     async with httpx.AsyncClient(timeout=180) as client:
@@ -153,7 +151,7 @@ async def generate_image(request: ImageGenerationRequest) -> list[ImageGeneratio
 
 # ---------- 多参考图生成（canvas 模块用） ----------
 
-# 本地图缓存目录（与 image_studio/image_variants 共用 outputs/image/）
+# 本地图缓存目录（outputs/image/）
 _CANVAS_OUTPUT_DIR = PROJECT_ROOT / "outputs" / "image"
 
 
@@ -180,7 +178,7 @@ def _resolve_output_image(url: str) -> tuple[bytes, str] | None:
 
 
 def _encode_to_b64(file_bytes: bytes, mime: str) -> str:
-    """字节转 data URI base64（与 image_studio.image_variants.encode_upload_to_b64 等价）。"""
+    """字节转 data URI base64。"""
     fmt = mime.split("/", 1)[1].lower() if "/" in mime else "jpeg"
     if fmt == "jpg":
         fmt = "jpeg"

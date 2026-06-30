@@ -1,11 +1,16 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { RotateCcw, LayoutGrid, Loader2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { RotateCcw, LayoutGrid, Loader2, Plus, Check, CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRunAgentStep } from "@/hooks/use-agents";
 import { useTextPolish } from "@/hooks/use-text-polish";
 import { useTopicGeneration } from "@/hooks/use-topic-generation";
 import { useCreateCanvasProject } from "@/hooks/use-canvas";
+import {
+  useCreateWorkshopSession,
+  useWorkshopSession,
+} from "@/hooks/use-workshop-sessions";
+import { useWorkshopAutosave } from "@/hooks/use-workshop-autosave";
 import {
   WORKSHOP_STEPS,
   DEFAULT_AUTO_RUN_TO,
@@ -36,6 +41,8 @@ import type {
  */
 export function WorkshopPage() {
   const store = useWorkshopStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSessionId = searchParams.get("sessionId");
 
   // API hooks
   const runAgentStep = useRunAgentStep();
@@ -43,9 +50,47 @@ export function WorkshopPage() {
   const topicGeneration = useTopicGeneration();
   const createCanvasProject = useCreateCanvasProject();
   const storyboard = useCanvasStoryboard();
+  const sessionQuery = useWorkshopSession(
+    urlSessionId && urlSessionId !== store.sessionId ? urlSessionId : null,
+  );
+  const createSession = useCreateWorkshopSession();
   const navigate = useNavigate();
   const [storyboardExporting, setStoryboardExporting] = useState(false);
   const [storyboardError, setStoryboardError] = useState<string | null>(null);
+
+  // 自动保存：监听 dirty，debounce 2s 后 PUT 到后端
+  useWorkshopAutosave();
+
+  // 从后端载入会话（URL ?sessionId 变化且与当前 store 不同时）
+  useEffect(() => {
+    if (!urlSessionId) return;
+    if (urlSessionId === store.sessionId) return;
+    if (sessionQuery.data) {
+      useWorkshopStore.getState().loadSession({
+        id: sessionQuery.data.id,
+        name: sessionQuery.data.name,
+        state: sessionQuery.data.state,
+      });
+    }
+  }, [urlSessionId, sessionQuery.data, store.sessionId]);
+
+  /** 新建工坊会话：把当前状态快照存到后端，关联 sessionId */
+  async function handleNewSession(): Promise<void> {
+    try {
+      const name = `工坊 ${store.form.product_name || ""} ${new Date().toLocaleString("zh-CN", { hour12: false })}`.trim();
+      const snapshot = store.buildSnapshot();
+      const res = await createSession.mutateAsync({ name, state: snapshot });
+      useWorkshopStore.getState().loadSession({
+        id: res.id,
+        name: res.name,
+        state: res.state,
+      });
+      setSearchParams({ sessionId: res.id }, { replace: true });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      alert(`新建工坊失败：${msg}`);
+    }
+  }
 
   /** 校验表单必填字段 */
   function validateForm(): string | null {
@@ -355,8 +400,32 @@ export function WorkshopPage() {
               分步 Agent 工坊
             </span>
             <h2 className="section-title">把创作拆成四道农事工序</h2>
+            {store.sessionName && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                当前会话：{store.sessionName}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
+            {/* 保存状态指示器 */}
+            {store.sessionId && (
+              <SaveStatusIndicator status={store.saveStatus} dirty={store.dirty} />
+            )}
+            {/* 新建工坊：把当前状态存到后端，生成可切换的历史记录 */}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => void handleNewSession()}
+              disabled={createSession.isPending}
+              title="新建工坊会话并保存到云端"
+            >
+              {createSession.isPending ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Plus size={14} />
+              )}{" "}
+              新建工坊
+            </Button>
             {/* 常驻入口：随时进入无限画布自由创作 / 故事板模式 */}
             <Button
               variant="outline"
@@ -438,5 +507,42 @@ export function WorkshopPage() {
         />
       </div>
     </section>
+  );
+}
+
+/** 保存状态指示器（小字 + 图标，对齐 canvas 的 autosave 体验）。 */
+function SaveStatusIndicator({
+  status,
+  dirty,
+}: {
+  status: "idle" | "saving" | "saved" | "error";
+  dirty: boolean;
+}) {
+  if (status === "saving") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-muted-foreground">
+        <Loader2 size={12} className="animate-spin" /> 保存中...
+      </span>
+    );
+  }
+  if (status === "error") {
+    return (
+      <span className="flex items-center gap-1 text-xs text-destructive">
+        <CloudOff size={12} /> 保存失败
+      </span>
+    );
+  }
+  if (status === "saved" && !dirty) {
+    return (
+      <span className="flex items-center gap-1 text-xs text-emerald-600 dark:text-emerald-400">
+        <Check size={12} /> 已保存
+      </span>
+    );
+  }
+  // idle 或 dirty（待保存）
+  return (
+    <span className="flex items-center gap-1 text-xs text-muted-foreground">
+      {dirty ? "未保存" : ""}
+    </span>
   );
 }

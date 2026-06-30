@@ -18,7 +18,10 @@ export const STORAGE_KEYS = {
   sidebarCollapsed: "qinghe_sidebar_collapsed",
   plans: "qinghe_plans",
   pipeline: "qinghe_pipeline_state",
+  /** 工坊运行时状态快照（sessionStorage，刷新可恢复当前会话）。 */
   workshop: "qinghe_workshop_state",
+  /** 工坊会话指针（sessionStorage，仅存 sessionId/name，完整 state 由后端负责）。 */
+  workshopSession: "qinghe_workshop_session",
   /** 无限画布会话（sessionStorage，仅存 projectId/name）。 */
   canvas: "qinghe_canvas_session",
 } as const;

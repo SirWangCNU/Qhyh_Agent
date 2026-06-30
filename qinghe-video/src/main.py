@@ -41,6 +41,7 @@ from src.tts_service import synthesize as tts_synthesize, _synthesize_async
 from src.video_compose import compose as compose_video
 from src.video_generation import VideoGenerationRequest, build_video_preview
 from src.video_mvp import VideoMvpRequest, video_mvp as run_video_mvp
+from src.workshop_sessions.router import router as workshop_sessions_router
 
 # ---------- 日志配置 ----------
 logging.basicConfig(
@@ -71,6 +72,8 @@ app.include_router(consistency_images_router)
 app.include_router(assets_router)
 # 注册无限画布路由（自由画布 + 多参考图生成）
 app.include_router(canvas_router)
+# 注册工坊会话路由（分步工坊历史记录持久化）
+app.include_router(workshop_sessions_router)
 
 # 允许前端跨域访问
 app.add_middleware(

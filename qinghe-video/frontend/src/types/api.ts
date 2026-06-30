@@ -552,3 +552,57 @@ export interface StoryboardComposeResponseDTO {
   audio_url: string | null;
   error: string | null;
 }
+
+// ============================================================
+// 工坊会话（Workshop Sessions）—— 与后端 src/workshop_sessions 对齐
+// ============================================================
+
+/** 工坊会话状态快照（即 workshop-store 的 persist snapshot）。 */
+export interface WorkshopSessionState {
+  steps: Record<string, string>;
+  stepOutputs: Record<string, unknown>;
+  stepErrors: Record<string, string>;
+  workshopState: GenerateResult;
+  mediaResults: {
+    characterImage: ConsistencyImageSlot | null;
+    objectImage: ConsistencyImageSlot | null;
+    sceneImage: ConsistencyImageSlot | null;
+  };
+  autoRunToStep: number;
+  currentStep: string;
+  form: UserInput;
+  oneLiner: string;
+  topics: TopicCandidate[];
+  selectedTopicIndex: number | null;
+  selectedTopic: TopicCandidate | null;
+}
+
+/** GET /api/workshop/sessions 列表项（不含 state，节省带宽）。 */
+export interface WorkshopSessionSummaryDTO {
+  id: string;
+  name: string;
+  /** 步骤进度摘要，如 "2/4"。 */
+  step_progress: string;
+  updated_at: string;
+}
+
+/** GET /api/workshop/sessions/{id} 完整会话。 */
+export interface WorkshopSessionDTO {
+  id: string;
+  name: string;
+  state: WorkshopSessionState;
+  created_at: string;
+  updated_at: string;
+}
+
+/** POST /api/workshop/sessions 请求体。 */
+export interface WorkshopSessionCreateInput {
+  name: string;
+  state?: Partial<WorkshopSessionState>;
+}
+
+/** PUT /api/workshop/sessions/{id} 请求体。 */
+export interface WorkshopSessionUpdateInput {
+  name?: string;
+  state?: Partial<WorkshopSessionState>;
+}

@@ -31,6 +31,10 @@ from sqlalchemy.orm import Session
 from src.assets import record_asset, url_to_local_path
 from src.canvas.models import (
     GenerateResult,
+    SegmentGenerateRequest,
+    SegmentGenerateResponse,
+    SegmentGenerateResult,
+    SegmentInput,
     ShotInput,
     ShotResultInput,
     StoryboardComposeRequest,
@@ -39,6 +43,7 @@ from src.canvas.models import (
     StoryboardGenerateResult,
 )
 from src.canvas.persistence import get_project, update_node_data
+from src.canvas.storyboard_board_prompt import STORYBOARD_BOARD_PROMPT
 from src.config import PROJECT_ROOT, settings
 from src.db.models import User
 from src.image_generation import generate_with_references
@@ -354,3 +359,176 @@ async def compose_storyboard_video(
         video_url=video_url,
         audio_url=audio_url,
     )
+
+
+# ============================================================
+# 段级故事板（Segment-level Director Board）生成
+# ============================================================
+
+
+def _resolve_segment_references(
+    character_ref: str | None,
+    object_ref: str | None,
+    scene_ref: str | None,
+) -> list[str]:
+    """收集段级生成的参考图 URL 列表（content_refs）。
+
+    段级导演板图统一注入画布级人物/物品/场景资产，去空去重，保留顺序。
+    与 shot 级 _resolve_shot_reference 的区别：段级不按 reference_type 单选，
+    而是把三类资产全部作为 content 参考图（多图时 gateway 转 base64 数组）。
+    """
+    raw = [character_ref, object_ref, scene_ref]
+    seen: list[str] = []
+    for url in raw:
+        if url and url.strip() and url.strip() not in seen:
+            seen.append(url.strip())
+    return seen
+
+
+async def _generate_single_segment(
+    seg: SegmentInput,
+    *,
+    character_ref: str | None,
+    object_ref: str | None,
+    scene_ref: str | None,
+    size: str | None,
+    model: str | None,
+    db: Session,
+    project_id: str,
+    user_id: int,
+) -> SegmentGenerateResult:
+    """生成单个片段的段级导演板图，并回写 StoryboardSegmentNode 状态。
+
+    失败时回写 status='error' + error，并返回 SegmentGenerateResult(error=...)。
+    """
+    node_id = seg.node_id or seg.segment_id
+
+    # 标记 running
+    if seg.node_id:
+        update_node_data(db, project_id, user_id, seg.node_id, {
+            "status": "running",
+            "error": None,
+        })
+
+    content_refs = _resolve_segment_references(character_ref, object_ref, scene_ref)
+    prompt = (
+        seg.system_prompt or STORYBOARD_BOARD_PROMPT
+    ) + "\n\nStoryboard Text:\n" + seg.storyboard_text
+    board_title = seg.title or f"片段 {seg.segment_id} 导演板图"
+
+    try:
+        result_url = await generate_with_references(
+            prompt=prompt,
+            negative_prompt=None,
+            content_refs=content_refs,
+            style_refs=None,
+            structure_refs=None,
+            size=size,
+            n=1,
+            model=model,
+        )
+    except Exception as e:
+        logger.exception(
+            "[storyboard-segment] 段级生成失败 segment_id=%s project=%s",
+            seg.segment_id, project_id,
+        )
+        if seg.node_id:
+            update_node_data(db, project_id, user_id, seg.node_id, {
+                "status": "error",
+                "error": str(e),
+            })
+        return SegmentGenerateResult(
+            node_id=node_id,
+            status="error",
+            error=str(e),
+        )
+
+    # 回写成功状态与结果图
+    if seg.node_id:
+        update_node_data(db, project_id, user_id, seg.node_id, {
+            "status": "done",
+            "resultImageUrl": result_url,
+            "error": None,
+        })
+
+    # 资产落库（失败仅记日志）
+    try:
+        record_asset(
+            db,
+            user_id,
+            source="canvas",
+            media_type="image",
+            url=result_url,
+            file_path=url_to_local_path(result_url),
+            title=board_title,
+            meta={
+                "project_id": project_id,
+                "segment_id": seg.segment_id,
+                "storyboard_segment": True,
+            },
+        )
+    except Exception:
+        logger.warning(
+            "[storyboard-segment] 资产落库失败 url=%s", result_url, exc_info=True
+        )
+
+    return SegmentGenerateResult(
+        node_id=node_id,
+        status="done",
+        result_image_url=result_url,
+    )
+
+
+async def batch_generate_segments(
+    db: Session,
+    project_id: str,
+    user: User,
+    req: SegmentGenerateRequest,
+) -> SegmentGenerateResponse:
+    """批量生成段级导演板图。
+
+    - 校验项目归属
+    - asyncio.Semaphore 限制并发（默认 3，上限 8）
+    - 每个段独立 try/except，单段失败不影响其他段
+    - 参考图统一用画布级 character/object/scene_ref（去空去重）
+    - 返回顺序与 req.segments 一致
+
+    用法示例::
+
+        from src.canvas.storyboard_service import batch_generate_segments
+        result = await batch_generate_segments(db, project_id, user, req)
+        print([r.status for r in result.results])
+    """
+    project = get_project(db, project_id, user.id)
+    if project is None:
+        raise ValueError("画布项目不存在或无归属")
+
+    concurrency = max(1, min(req.concurrency, 8))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _run_with_limit(seg: SegmentInput) -> SegmentGenerateResult:
+        async with semaphore:
+            return await _generate_single_segment(
+                seg,
+                character_ref=req.character_ref,
+                object_ref=req.object_ref,
+                scene_ref=req.scene_ref,
+                size=req.size,
+                model=req.model,
+                db=db,
+                project_id=project_id,
+                user_id=user.id,
+            )
+
+    results = await asyncio.gather(
+        *[_run_with_limit(s) for s in req.segments]
+    )
+
+    logger.info(
+        "[storyboard-segment] 批量生成完成 project=%s segments=%d success=%d",
+        project_id,
+        len(req.segments),
+        sum(1 for r in results if r.status == "done"),
+    )
+
+    return SegmentGenerateResponse(results=list(results))

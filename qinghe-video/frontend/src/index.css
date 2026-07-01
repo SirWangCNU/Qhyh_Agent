@@ -102,7 +102,20 @@
   }
 
   .container-app {
-    @apply relative z-[2] mx-auto w-full max-w-content px-6;
+    @apply relative z-[2] mx-auto w-full px-4 sm:px-6 lg:px-8;
+    max-width: 1200px;
+  }
+
+  @media (min-width: 1280px) {
+    .container-app {
+      max-width: 1400px;
+    }
+  }
+
+  @media (min-width: 1536px) {
+    .container-app {
+      max-width: 1600px;
+    }
   }
 
   /* 焦点可见性（可访问性） */

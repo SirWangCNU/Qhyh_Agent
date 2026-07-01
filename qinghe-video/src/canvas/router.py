@@ -27,6 +27,8 @@ from src.canvas.models import (
     CanvasProjectCreate,
     CanvasProjectUpdate,
     GenerateRequest,
+    SegmentGenerateRequest,
+    SegmentGenerateResponse,
     StoryboardComposeRequest,
     StoryboardComposeResult,
     StoryboardGenerateRequest,
@@ -42,6 +44,7 @@ from src.canvas.persistence import (
 )
 from src.canvas.service import run_generate
 from src.canvas.storyboard_service import (
+    batch_generate_segments,
     batch_generate_shots,
     compose_storyboard_video,
 )
@@ -296,6 +299,41 @@ async def compose_storyboard_api(
         )
         raise HTTPException(
             status_code=500, detail=f"故事板合成失败: {e}"
+        ) from e
+    return result.model_dump()
+
+
+@router.post(
+    "/api/canvas/projects/{project_id}/storyboard/segment-generate",
+    summary="批量生成段级导演板图",
+)
+async def generate_storyboard_segments_api(
+    project_id: str,
+    req: SegmentGenerateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """批量为故事板片段生成段级导演板图（Prompt B · SMART SHOT SHEET V2）。
+
+    与 shot 级 /storyboard/generate 的区别：
+    - 产物是含 SHOT GRID / CAMERA RHYTHM / SOUND BEAT 布局的"导演板图"，非单镜分镜图
+    - 提示词由 system_prompt（默认 STORYBOARD_BOARD_PROMPT）+ segment.storyboard_text 拼接
+    - 参考图统一用画布级 character/object/scene_ref（去空去重，多图转 base64 数组）
+    - 生成成功后回写对应 StoryboardSegmentNode 的 status/resultImageUrl
+    - 返回 SegmentGenerateResponse：每个片段的结果列表（顺序与请求一致）
+    """
+    try:
+        result = await batch_generate_segments(
+            db, project_id, current_user, req
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except Exception as e:
+        logger.exception(
+            "[API] 段级故事板生成失败 project=%s", project_id
+        )
+        raise HTTPException(
+            status_code=500, detail=f"段级故事板生成失败: {e}"
         ) from e
     return result.model_dump()
 

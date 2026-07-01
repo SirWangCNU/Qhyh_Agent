@@ -1,9 +1,16 @@
+import * as React from "react";
+import { LayoutGrid, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { resolveMediaUrl } from "@/hooks/use-agents";
+import { useExportStoryboardToCanvas } from "@/components/canvas/hooks/useExportStoryboardToCanvas";
 import type {
   PlannerOutput,
   CopywriterOutput,
   ScriptwriterOutput,
+  StorySegment,
+  Shot,
   VisualOutput,
   DistributorOutput,
 } from "@/types/api";
@@ -113,11 +120,13 @@ function CopywriterView({ output }: { output: CopywriterOutput }) {
 }
 
 function ScriptwriterView({ output }: { output: ScriptwriterOutput }) {
+  const hasSegments = !!output.segments?.length;
   return (
     <div className="space-y-2">
       <Field label="脚本标题">{output.title}</Field>
       <div className="flex gap-4 text-xs text-ink-faint">
         <span>总时长：{output.total_duration_seconds}s</span>
+        <span>片段数：{output.segments?.length ?? 0}</span>
         <span>分镜数：{output.shots.length}</span>
       </div>
       <Field label="BGM 建议">
@@ -128,43 +137,152 @@ function ScriptwriterView({ output }: { output: ScriptwriterOutput }) {
           参考：{output.bgm_suggestion.reference}
         </div>
       </Field>
-      <Field label="分镜表">
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-border text-left text-ink-faint">
-                <th className="p-1.5">#</th>
-                <th className="p-1.5">时长</th>
-                <th className="p-1.5">镜头</th>
-                <th className="p-1.5">画面</th>
-                <th className="p-1.5">旁白</th>
-              </tr>
-            </thead>
-            <tbody>
-              {output.shots.map((shot) => (
-                <tr key={shot.shot_id} className="border-b border-border/60 align-top">
-                  <td className="p-1.5 font-mono">{shot.shot_id}</td>
-                  <td className="p-1.5 whitespace-nowrap">
-                    {shot.start_time}-{shot.end_time}
-                  </td>
-                  <td className="p-1.5">
-                    {shot.shot_type}
-                    <br />
-                    <span className="text-ink-faint">{shot.camera_movement}</span>
-                  </td>
-                  <td className="p-1.5">{shot.visual_description}</td>
-                  <td className="p-1.5">{shot.voiceover}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Field>
+      {hasSegments ? (
+        <Field label="故事板片段">
+          <div className="space-y-3">
+            {output.segments!.map((seg) => (
+              <SegmentCard key={seg.segment_id} segment={seg} />
+            ))}
+          </div>
+        </Field>
+      ) : (
+        <Field label="分镜表">
+          <ShotsTable shots={output.shots} />
+        </Field>
+      )}
       {output.production_notes && (
         <Field label="制作备注">
           <p className="text-xs text-ink-soft">{output.production_notes}</p>
         </Field>
       )}
+    </div>
+  );
+}
+
+/** 单个故事板片段卡片：段头 + 镜头表 + 04b 故事板文本 + 导演板图。 */
+function SegmentCard({ segment }: { segment: StorySegment }) {
+  const storyboardExport = useExportStoryboardToCanvas();
+  const hasStoryboardText = !!segment.storyboard_text?.trim();
+  const boardUrl = segment.storyboard_board_image_url?.trim() || null;
+  const resolvedBoardUrl = boardUrl ? resolveMediaUrl(boardUrl) : null;
+
+  return (
+    <div className="rounded-md border border-border/70 bg-secondary/20 p-2">
+      <div className="mb-2 flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant="secondary" className="font-mono">
+          片段 {segment.segment_id}
+        </Badge>
+        <span className="whitespace-nowrap text-ink-soft">
+          {segment.start_time}-{segment.end_time}
+        </span>
+        <span className="whitespace-nowrap text-ink-faint">
+          {segment.duration_seconds}s · {segment.shots.length} 镜
+        </span>
+        <Button
+          size="sm"
+          variant="outline"
+          className="ml-auto h-7 px-2 text-[11px]"
+          onClick={() => void storyboardExport.exportToCanvas()}
+          disabled={!hasStoryboardText || storyboardExport.exporting}
+          title={
+            !hasStoryboardText
+              ? "故事板文本未生成，无法进入画布"
+              : "把全部片段与素材导入无限画布，在画布上生成段级导演板图"
+          }
+        >
+          {storyboardExport.exporting ? (
+            <>
+              <Loader2 size={12} className="mr-1 animate-spin" />
+              导出中…
+            </>
+          ) : (
+            <>
+              <LayoutGrid size={12} className="mr-1" />
+              在画布中生成故事板
+            </>
+          )}
+        </Button>
+      </div>
+      <ShotsTable shots={segment.shots} />
+      <div className="mt-2">
+        <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+          故事板文本（04b 导演蓝图）
+        </div>
+        {hasStoryboardText ? (
+          <pre className="max-h-96 overflow-auto whitespace-pre-wrap rounded-md bg-secondary/40 p-2 text-[11px] leading-relaxed text-ink-soft">
+            {segment.storyboard_text}
+          </pre>
+        ) : (
+          <p className="text-xs text-ink-faint italic">
+            故事板文本未生成（可能正在生成或生成失败）
+          </p>
+        )}
+      </div>
+      {storyboardExport.error && (
+        <p className="mt-1 text-[11px] text-destructive">
+          {storyboardExport.error}（可重试）
+        </p>
+      )}
+      {resolvedBoardUrl ? (
+        <div className="mt-2">
+          <div className="mb-1 flex items-center justify-between">
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-ink-faint">
+              导演板图（Prompt B · SMART SHOT SHEET V2，历史生成）
+            </span>
+          </div>
+          <img
+            src={resolvedBoardUrl}
+            alt={`片段 ${segment.segment_id} 导演板图`}
+            className="w-full rounded-md border border-border/60 shadow-sm"
+            loading="lazy"
+          />
+        </div>
+      ) : (
+        <div className="mt-2 rounded-md border border-dashed border-border/60 bg-secondary/20 p-3 text-center">
+          <p className="text-[11px] text-ink-faint">
+            导演板图在无限画布中生成（点击上方「在画布中生成故事板」进入）
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** 分镜表（段内或平铺回退共用）。 */
+function ShotsTable({ shots }: { shots: Shot[] }) {
+  if (!shots.length) {
+    return <p className="text-xs text-ink-faint italic">无镜头</p>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse text-xs">
+        <thead>
+          <tr className="border-b border-border text-left text-ink-faint">
+            <th className="p-1.5">#</th>
+            <th className="p-1.5">时长</th>
+            <th className="p-1.5">镜头</th>
+            <th className="p-1.5">画面</th>
+            <th className="p-1.5">旁白</th>
+          </tr>
+        </thead>
+        <tbody>
+          {shots.map((shot) => (
+            <tr key={shot.shot_id} className="border-b border-border/60 align-top">
+              <td className="p-1.5 font-mono">{shot.shot_id}</td>
+              <td className="p-1.5 whitespace-nowrap">
+                {shot.start_time}-{shot.end_time}
+              </td>
+              <td className="p-1.5">
+                {shot.shot_type}
+                <br />
+                <span className="text-ink-faint">{shot.camera_movement}</span>
+              </td>
+              <td className="p-1.5">{shot.visual_description}</td>
+              <td className="p-1.5">{shot.voiceover}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

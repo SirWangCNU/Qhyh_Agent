@@ -33,7 +33,12 @@ from src.consistency_images import consistency_images_router
 from src.db.database import get_db
 from src.db.models import User
 from src.graph import app_graph
-from src.image_generation import ImageGenerationRequest, generate_image
+from src.image_generation import (
+    EditImageGenerationRequest,
+    ImageGenerationRequest,
+    generate_edit_image,
+    generate_image,
+)
 from src.models import UserInput
 from src.text_polish import PolishRequest, polish_user_input
 from src.topic_generation import TopicRequest, generate_topics
@@ -215,7 +220,7 @@ async def generate_image_asset(payload: ImageGenerationRequest, _current_user: U
                 media_type="image",
                 url=item.url,
                 file_path=url_to_local_path(item.url),
-                title=(payload.prompt[:80] if payload.prompt else None),
+                title=(payload.title or payload.prompt[:80] if payload.prompt else None),
             )
         except Exception:
             logger.warning("[assets] 图片生成资产落库失败 url=%s", item.url, exc_info=True)
@@ -224,6 +229,40 @@ async def generate_image_asset(payload: ImageGenerationRequest, _current_user: U
         "status": "success",
         "model": settings.IMAGE_MODEL,
         "size": payload.size or settings.IMAGE_SIZE,
+        "images": [item.model_dump() for item in images],
+    }
+
+
+@app.post("/api/images/edit-generate", summary="使用 gpt-image-2 生成/编辑图片")
+async def generate_edit_image_asset(payload: EditImageGenerationRequest, _current_user: User = Depends(get_current_user), db: Session = Depends(get_db)) -> dict[str, Any]:
+    """使用 gpt-image-2 模型生成或编辑图片素材。"""
+    try:
+        images = await generate_edit_image(payload)
+    except Exception as e:
+        logger.exception("[API] gpt-image-2 图片生成失败")
+        raise HTTPException(status_code=500, detail=f"图片生成失败: {e}") from e
+
+    # 自动收集：每张图落库到资产表（失败仅记日志，不阻断主流程）
+    for item in images:
+        if not item.url:
+            continue
+        try:
+            record_asset(
+                db,
+                _current_user.id,
+                source="image_edit",
+                media_type="image",
+                url=item.url,
+                file_path=url_to_local_path(item.url),
+                title=(payload.title or payload.prompt[:80] if payload.prompt else None),
+            )
+        except Exception:
+            logger.warning("[assets] gpt-image-2 资产落库失败 url=%s", item.url, exc_info=True)
+
+    return {
+        "status": "success",
+        "model": payload.model,
+        "size": payload.size,
         "images": [item.model_dump() for item in images],
     }
 

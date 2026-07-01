@@ -41,6 +41,7 @@ export type AssetSource =
   | "image_studio"
   | "consistency"
   | "image_gen"
+  | "image_edit"
   | "canvas"
   | "upload";
 
@@ -93,6 +94,7 @@ export const ASSET_SOURCE_LABELS: Record<AssetSource, string> = {
   image_studio: "图像工作室",
   consistency: "一致性生图",
   image_gen: "图片生成",
+  image_edit: "图片编辑",
   canvas: "无限画布",
   upload: "手动上传",
 };
@@ -223,10 +225,24 @@ export interface Shot {
   transition?: string;
 }
 
+export interface StorySegment {
+  segment_id: number;
+  start_time: string;
+  end_time: string;
+  duration_seconds: number;
+  shots: Shot[];
+  storyboard_text: string;
+  /** 该片段导演板图 URL（用户在工坊手动触发生成，旧会话可能缺失） */
+  storyboard_board_image_url?: string;
+}
+
 export interface ScriptwriterOutput {
   title: string;
   total_duration_seconds: number;
   bgm_suggestion: BgmSuggestion;
+  /** ≤15s 故事板片段列表；旧会话可能缺失，回退到 shots 平铺视图 */
+  segments?: StorySegment[];
+  /** 所有片段镜头的平铺视图（向后兼容 visual_designer / 画布导出） */
   shots: Shot[];
   production_notes: string;
 }
@@ -329,6 +345,20 @@ export interface ImageGenerationRequest {
   n?: number;
   /** 可选参考图路径（/outputs/image/xxx.jpg），存在则走图生图。 */
   reference_image_path?: string;
+  /** 资产标题，未指定时取 prompt 前 80 字符 */
+  title?: string;
+}
+
+export interface EditImageGenerationRequest {
+  prompt: string;
+  size?: string;
+  aspect_ratio?: string;
+  n?: number;
+  model?: string;
+  image?: string[];
+  watermark?: boolean;
+  /** 资产标题，未指定时取 prompt 前 80 字符 */
+  title?: string;
 }
 
 export interface GeneratedImage {
@@ -484,15 +514,28 @@ export interface StoryboardShot {
   reference_type?: "character" | "object" | "scene";
 }
 
+/** 工坊导出的单个段级故事板数据（04b 故事板文本，本次导出主载荷）。 */
+export interface SegmentPayloadDTO {
+  segment_id: string;
+  title: string;
+  /** 04b 故事板文本（由后端 scriptwriter 节点填充）。 */
+  storyboard_text: string;
+}
+
 /** 工坊 → 画布的完整故事板 payload。 */
 export interface StoryboardPayload {
-  shots: StoryboardShot[];
+  /** 段级故事板数据（04b 故事板文本，本次导出主载荷）。 */
+  segments?: SegmentPayloadDTO[];
+  /** shot 级分镜数据（保留向后兼容，默认不导出）。 */
+  shots?: StoryboardShot[];
   /** 人物/物品/场景一致性参考图 URL（来自工坊第 3 步）。 */
   character_ref?: string;
   object_ref?: string;
   scene_ref?: string;
   /** 整体旁白文本（来自 copywriter.full_script）。 */
   voiceover_text?: string;
+  /** 段级导演板系统提示词（默认前端 STORYBOARD_BOARD_PROMPT）。 */
+  systemPrompt?: string;
 }
 
 /** 后端 ShotInput（与 src/canvas/models.py 对齐）。 */
@@ -529,6 +572,47 @@ export interface StoryboardShotResultDTO {
 /** POST /api/canvas/projects/{id}/storyboard/generate 响应。 */
 export interface StoryboardGenerateResponseDTO {
   results: StoryboardShotResultDTO[];
+}
+
+// ============================================================
+// 段级故事板（Segment-level Director Board）DTO
+// 与 src/canvas/models.py 的 SegmentInput / SegmentGenerate* 对齐
+// ============================================================
+
+/** 后端 SegmentInput。 */
+export interface SegmentInputDTO {
+  segment_id: string;
+  /** 04b 故事板文本。 */
+  storyboard_text: string;
+  /** 段级导演板系统提示词；未传则用后端默认 STORYBOARD_BOARD_PROMPT。 */
+  system_prompt?: string;
+  title: string;
+  /** 前端 StoryboardSegmentNode 节点 id，用于回写状态与结果图。 */
+  node_id?: string;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/segment-generate 请求体。 */
+export interface SegmentGenerateRequestDTO {
+  segments: SegmentInputDTO[];
+  character_ref?: string;
+  object_ref?: string;
+  scene_ref?: string;
+  size?: string;
+  model?: string;
+  concurrency?: number;
+}
+
+/** 后端 SegmentGenerateResult。 */
+export interface SegmentGenerateResultDTO {
+  node_id: string;
+  status: "idle" | "running" | "done" | "error";
+  result_image_url: string | null;
+  error: string | null;
+}
+
+/** POST /api/canvas/projects/{id}/storyboard/segment-generate 响应。 */
+export interface SegmentGenerateResponseDTO {
+  results: SegmentGenerateResultDTO[];
 }
 
 /** 单个分镜的合成输入。 */

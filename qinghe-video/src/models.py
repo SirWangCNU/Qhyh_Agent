@@ -131,6 +131,25 @@ class Shot(BaseModel):
     transition: str
 
 
+class StorySegment(BaseModel):
+    """单个 ≤15s 故事板片段。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    segment_id: int = Field(..., description="片段序号，从 1 开始")
+    start_time: str = Field(..., description="该片段起始时间，如 00:00")
+    end_time: str = Field(..., description="该片段结束时间，如 00:15")
+    duration_seconds: float = Field(..., description="该片段时长，必须 ≤ 15.0")
+    shots: list[Shot] = Field(..., description="该片段内的镜头列表")
+    storyboard_text: str = Field(
+        default="", description="04b 格式故事板文本（由二次 LLM 调用填充）"
+    )
+    storyboard_board_image_url: str = Field(
+        default="",
+        description="该片段导演板图 URL（由用户在工坊手动触发生成，默认空串）",
+    )
+
+
 class ScriptwriterOutput(BaseModel):
     """脚本 Agent 输出。"""
 
@@ -139,7 +158,11 @@ class ScriptwriterOutput(BaseModel):
     title: str
     total_duration_seconds: int
     bgm_suggestion: BgmSuggestion
-    shots: list[Shot]
+    segments: list[StorySegment] = Field(..., description="≤15s 故事板片段列表")
+    shots: list[Shot] = Field(
+        default_factory=list,
+        description="所有片段镜头的平铺视图（由节点从 segments 拼接，向后兼容 visual_designer/video_mvp）",
+    )
     production_notes: str
 
 

@@ -21,7 +21,8 @@ export type CanvasNodeKind =
   | "prompt"
   | "generate"
   | "image"
-  | "shot";
+  | "shot"
+  | "segment";
 
 /** 故事板分镜参考图类型（与工坊一致性图对齐）。 */
 export type ShotRefType = "character" | "object" | "scene";
@@ -39,10 +40,15 @@ export interface ReferenceImageNodeData {
   [key: string]: unknown;
 }
 
+/** 提示词角色：system=系统提示词 / storyboard=故事板文本 / generic=通用（默认） */
+export type PromptRole = "system" | "storyboard" | "generic";
+
 /** 提示词节点数据。 */
 export interface PromptNodeData {
   kind: "prompt";
   prompt: string;
+  /** 提示词角色：连入 segment 节点时按 role 自动归类。 */
+  role?: PromptRole;
   [key: string]: unknown;
 }
 
@@ -100,6 +106,30 @@ export interface ShotNodeData {
   resultImageUrl?: string;
   /** 生成失败时的错误信息。 */
   error?: string;
+  /** 本段生成使用的图片模型；未指定时由后端使用 settings.IMAGE_MODEL。 */
+  model?: string;
+  [key: string]: unknown;
+}
+
+/** 段级故事板节点数据（故事板模式专用，承载 04b 文本 + 段级导演板图生成）。 */
+export interface SegmentNodeData {
+  kind: "segment";
+  /** 来自 scriptwriter 的 segment id。 */
+  segmentId: string;
+  /** 段标题，如「片段 1」。 */
+  title: string;
+  /** 04b 故事板文本（START FRAME / SHOT GRID / CAMERA RHYTHM / SOUND BEAT 等）。 */
+  storyboardText: string;
+  /** 本段系统提示词（默认 = 画布 systemPrompt，可单独覆盖）。 */
+  systemPrompt: string;
+  /** 生成状态。 */
+  status: GenerateStatus;
+  /** 生成成功后的段级导演板图 URL。 */
+  resultImageUrl?: string;
+  /** 生成失败时的错误信息。 */
+  error?: string;
+  /** 本段生成使用的图片模型；未指定时由后端使用 settings.IMAGE_MODEL。 */
+  model?: string;
   [key: string]: unknown;
 }
 
@@ -109,7 +139,8 @@ export type CanvasNodeData =
   | PromptNodeData
   | GenerateNodeData
   | ImageNodeData
-  | ShotNodeData;
+  | ShotNodeData
+  | SegmentNodeData;
 
 export type CanvasNode = Node<CanvasNodeData>;
 export type CanvasEdge = Edge;
@@ -152,12 +183,17 @@ export const TOOLBAR_ITEMS: {
   kind: CanvasNodeKind;
   label: string;
   emoji: string;
+  /** 拖拽落点时预设的节点 data（如 prompt 的 role）。 */
+  preset?: Partial<CanvasNodeData>;
 }[] = [
   { kind: "referenceImage", label: "参考图", emoji: "🖼️" },
   { kind: "prompt", label: "提示词", emoji: "✍️" },
+  { kind: "prompt", label: "故事板文本", emoji: "📜", preset: { kind: "prompt", role: "storyboard" } },
+  { kind: "prompt", label: "系统提示词", emoji: "⚙️", preset: { kind: "prompt", role: "system" } },
   { kind: "generate", label: "生成", emoji: "⚡" },
   { kind: "image", label: "结果图", emoji: "📷" },
   { kind: "shot", label: "分镜", emoji: "🎬" },
+  { kind: "segment", label: "片段", emoji: "🎞️" },
 ];
 
 /** 分镜参考图类型选项（用于 ShotNode 属性面板）。 */
@@ -204,6 +240,13 @@ export function isValidConnection(
   }
   if (
     tgtKind === "shot" &&
+    (srcKind === "referenceImage" || srcKind === "prompt")
+  ) {
+    return true;
+  }
+  // 段级故事板节点：参考图/提示词可连入（资产/提示词绑定到段）
+  if (
+    tgtKind === "segment" &&
     (srcKind === "referenceImage" || srcKind === "prompt")
   ) {
     return true;

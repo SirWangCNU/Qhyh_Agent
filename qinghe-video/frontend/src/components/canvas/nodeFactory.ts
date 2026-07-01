@@ -10,6 +10,8 @@ import type {
   CanvasNodeData,
   CanvasNodeKind,
   ImageNodeData,
+  PromptRole,
+  SegmentNodeData,
   ShotNodeData,
 } from "@/components/canvas/types";
 import { FALLBACK_MODEL } from "@/components/canvas/types";
@@ -47,7 +49,7 @@ export function defaultNodeData(kind: CanvasNodeKind): CanvasNodeData {
         label: "参考图",
       };
     case "prompt":
-      return { kind: "prompt", prompt: "" };
+      return { kind: "prompt", prompt: "", role: "generic" };
     case "generate":
       return {
         kind: "generate",
@@ -70,19 +72,32 @@ export function defaultNodeData(kind: CanvasNodeKind): CanvasNodeData {
         duration: 3.5,
         status: "idle",
       };
+    case "segment":
+      return {
+        kind: "segment",
+        segmentId: "",
+        title: "新片段",
+        storyboardText: "",
+        systemPrompt: "",
+        status: "idle",
+      };
   }
 }
 
-/** 创建一个默认节点（拖拽落点用）。 */
+/** 创建一个默认节点（拖拽落点用）。
+ *
+ * @param preset 预设 data，会合并到默认值之上（如 prompt 的 role）。
+ */
 export function makeDefaultNode(
   kind: CanvasNodeKind,
   position: XYPosition,
+  preset?: Partial<CanvasNodeData>,
 ): CanvasNode {
   return {
     id: makeNodeId(),
     type: kind,
     position,
-    data: defaultNodeData(kind),
+    data: { ...defaultNodeData(kind), ...preset } as CanvasNodeData,
   };
 }
 
@@ -116,6 +131,38 @@ export function makeImageNode(
 // ============================================================
 // 故事板分镜节点
 // ============================================================
+
+/** 创建一个提示词节点（指定 role，导出流程 / 工具栏预设用）。
+ *
+ * @param role system=系统提示词 / storyboard=故事板文本 / generic=通用
+ */
+export function makePromptNode(
+  role: PromptRole,
+  prompt: string,
+  position: XYPosition,
+  label?: string,
+): CanvasNode {
+  return {
+    id: makeNodeId(),
+    type: "prompt",
+    position,
+    data: { kind: "prompt", prompt, role, label },
+  };
+}
+
+/** 创建一个参考图节点（预设 imageUrl，导出流程用）。 */
+export function makeReferenceImageNode(
+  url: string,
+  position: XYPosition,
+  label = "参考图",
+): CanvasNode {
+  return {
+    id: makeNodeId(),
+    type: "referenceImage",
+    position,
+    data: { kind: "referenceImage", imageUrl: url, refType: "content", label },
+  };
+}
 
 /** 单个分镜的导入数据（来自工坊 scriptwriter + visual_designer）。 */
 export interface ShotImport {
@@ -203,4 +250,61 @@ export function makeShotNodes(
 ): CanvasNode[] {
   const positions = layoutStoryboardShots(shots.length, options);
   return shots.map((shot, i) => makeShotNode(shot, positions[i]!));
+}
+
+// ============================================================
+// 段级故事板节点（Segment-level Director Board）
+// ============================================================
+
+/** 单个段级故事板的导入数据（来自工坊 scriptwriter_output.segments）。 */
+export interface SegmentImport {
+  segmentId: string;
+  title: string;
+  /** 04b 故事板文本。 */
+  storyboardText: string;
+  /** 本段系统提示词；未传则用画布级 systemPrompt。 */
+  systemPrompt?: string;
+}
+
+/**
+ * 从工坊 segment 数据创建 StoryboardSegmentNode。
+ *
+ * @param systemPrompt 画布级系统提示词（来自 canvas-store），作为本段默认值；
+ *                    若 seg.systemPrompt 显式传入则覆盖。
+ */
+export function makeSegmentNode(
+  seg: SegmentImport,
+  position: XYPosition,
+  systemPrompt: string,
+): CanvasNode {
+  const data: SegmentNodeData = {
+    kind: "segment",
+    segmentId: seg.segmentId,
+    title: seg.title || `片段 ${seg.segmentId}`,
+    storyboardText: seg.storyboardText,
+    systemPrompt: seg.systemPrompt ?? systemPrompt,
+    status: "idle",
+  };
+  return {
+    id: makeNodeId(),
+    type: "segment",
+    position,
+    data,
+  };
+}
+
+/**
+ * 批量创建 StoryboardSegmentNode 阵列（按 layout 纵向排列）。
+ *
+ * 段节点比 ShotNode 高（含 04b 文本展示），建议调用方传 rowGap ≥ 420。
+ */
+export function makeSegmentNodes(
+  segments: SegmentImport[],
+  options: StoryboardLayoutOptions = {},
+  systemPrompt: string,
+): CanvasNode[] {
+  const positions = layoutStoryboardShots(segments.length, options);
+  return segments.map((seg, i) =>
+    makeSegmentNode(seg, positions[i]!, systemPrompt),
+  );
 }

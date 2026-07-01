@@ -19,7 +19,7 @@ from src.config import settings
 def _download_image(url: str) -> bytes:
     """下载图片 URL 返回字节（支持 http 和本地路径）。"""
     if url.startswith(("http://", "https://")):
-        with httpx.Client(timeout=60, follow_redirects=True) as client:
+        with httpx.Client(timeout=60, follow_redirects=True, trust_env=False) as client:
             response = client.get(url)
             response.raise_for_status()
             return response.content

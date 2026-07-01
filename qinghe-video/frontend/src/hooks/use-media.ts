@@ -3,6 +3,7 @@ import { apiFetch, apiPost, getAuthToken } from "@/lib/api";
 import type {
   ConsistencyImageResponse,
   ConsistencyImageType,
+  EditImageGenerationRequest,
   ImageGenerationResponse,
   ImageGenerationRequest,
   TTSRequest,
@@ -66,6 +67,14 @@ export function useGenerateImage() {
   return useMutation({
     mutationFn: (req: ImageGenerationRequest) =>
       apiPost<ImageGenerationResponse>("/api/images/generate", req),
+  });
+}
+
+/** gpt-image-2 图片编辑/生成 hook（POST /api/images/edit-generate）。 */
+export function useGenerateEditImage() {
+  return useMutation({
+    mutationFn: (req: EditImageGenerationRequest) =>
+      apiPost<ImageGenerationResponse>("/api/images/edit-generate", req),
   });
 }
 

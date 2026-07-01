@@ -27,6 +27,7 @@ import { PromptNode } from "@/components/canvas/nodes/PromptNode";
 import { GenerateNode } from "@/components/canvas/nodes/GenerateNode";
 import { ImageNode } from "@/components/canvas/nodes/ImageNode";
 import { ShotNode } from "@/components/canvas/nodes/ShotNode";
+import { StoryboardSegmentNode } from "@/components/canvas/nodes/StoryboardSegmentNode";
 
 /** 节点类型映射（必须定义在组件外，避免每次渲染重建触发 React Flow 警告）。 */
 const nodeTypes = {
@@ -35,6 +36,7 @@ const nodeTypes = {
   generate: GenerateNode,
   image: ImageNode,
   shot: ShotNode,
+  segment: StoryboardSegmentNode,
 };
 
 interface CanvasFlowProps {
@@ -91,7 +93,7 @@ export function CanvasFlow({ onDrop, onDragOver, onInit }: CanvasFlowProps) {
         }}
         proOptions={{ hideAttribution: true }}
       >
-        <Background gap={20} size={1.2} color="#e2e8f0" />
+        <Background gap={24} size={1} color="rgba(0,0,0,0.06)" />
         <Controls className="!rounded-md !border !shadow-sm" />
         <MiniMap
           pannable
@@ -110,6 +112,8 @@ export function CanvasFlow({ onDrop, onDragOver, onInit }: CanvasFlowProps) {
                 return "#a855f7";
               case "shot":
                 return "#f97316";
+              case "segment":
+                return "#ca8a04";
               default:
                 return "#94a3b8";
             }

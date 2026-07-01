@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 import pytest
+from pydantic import ValidationError
 
 from src.models import (
+    BgmSuggestion,
     CopywriterOutput,
     DistributorOutput,
     PlannerOutput,
     ScriptwriterOutput,
     ShotPrompt,
+    StorySegment,
     VisualOutput,
 )
 from src.state import QingheState
@@ -76,6 +79,56 @@ def test_visual_shot_prompt_normalizes_pitch_id():
 
     assert shot.shot_id == 5
     assert "pitch_id" not in shot.model_dump()
+
+
+def test_story_segment_model_forbids_extra():
+    """StorySegment 应拒绝多余字段，且 storyboard_text 可缺省为空串。"""
+    valid = {
+        "segment_id": 1,
+        "start_time": "00:00",
+        "end_time": "00:15",
+        "duration_seconds": 15.0,
+        "shots": [],
+    }
+    # 缺省 storyboard_text 合法（默认 ""）
+    seg = StorySegment(**valid)
+    assert seg.storyboard_text == ""
+    assert seg.storyboard_board_image_url == ""
+    # 多余字段应被拒绝
+    with pytest.raises(ValidationError):
+        StorySegment(**{**valid, "extra_field": "bad"})
+
+
+def test_scriptwriter_output_segments_required_shots_optional():
+    """ScriptwriterOutput 必须有 segments，shots 可缺省为空列表。"""
+    bgm = BgmSuggestion(style="s", bpm_range="b", mood="m", reference="r")
+    # 缺 shots 合法（默认空列表）
+    out = ScriptwriterOutput(
+        title="t",
+        total_duration_seconds=15,
+        bgm_suggestion=bgm,
+        segments=[],
+        production_notes="n",
+    )
+    assert out.shots == []
+    # 缺 segments 非法
+    with pytest.raises(ValidationError):
+        ScriptwriterOutput(
+            title="t",
+            total_duration_seconds=15,
+            bgm_suggestion=bgm,
+            production_notes="n",
+        )
+    # 多余字段应被拒绝
+    with pytest.raises(ValidationError):
+        ScriptwriterOutput(
+            title="t",
+            total_duration_seconds=15,
+            bgm_suggestion=bgm,
+            segments=[],
+            production_notes="n",
+            extra_field="bad",
+        )
 
 
 def test_graph_builds_without_error():

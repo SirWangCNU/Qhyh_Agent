@@ -13,6 +13,8 @@ import { apiFetch, apiGet, apiPost } from "@/lib/api";
 import type { Edge, Viewport } from "@xyflow/react";
 import type { CanvasNode, RefType } from "@/components/canvas/types";
 import type {
+  SegmentGenerateRequestDTO,
+  SegmentGenerateResponseDTO,
   StoryboardComposeRequestDTO,
   StoryboardComposeResponseDTO,
   StoryboardGenerateRequestDTO,
@@ -222,6 +224,23 @@ export function useStoryboardGenerateMutation() {
     }) =>
       apiPost<StoryboardGenerateResponseDTO>(
         `/api/canvas/projects/${projectId}/storyboard/generate`,
+        body,
+      ),
+  });
+}
+
+/** 批量生成段级导演板图。 POST /api/canvas/projects/{id}/storyboard/segment-generate */
+export function useStoryboardSegmentGenerateMutation() {
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      body,
+    }: {
+      projectId: string;
+      body: SegmentGenerateRequestDTO;
+    }) =>
+      apiPost<SegmentGenerateResponseDTO>(
+        `/api/canvas/projects/${projectId}/storyboard/segment-generate`,
         body,
       ),
   });

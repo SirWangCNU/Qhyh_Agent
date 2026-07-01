@@ -25,12 +25,13 @@ def get_llm(temperature: float | None = None, **kwargs) -> ChatOpenAI:
     Returns:
         ChatOpenAI: 配置好的 LLM 实例。
     """
+    # kwargs 中显式传入的参数优先于 settings（如 max_tokens 覆盖）
     llm = ChatOpenAI(
         model=settings.LLM_MODEL,
         base_url=settings.LLM_BASE_URL,
         api_key=settings.LLM_API_KEY,
         temperature=temperature if temperature is not None else settings.LLM_TEMPERATURE,
-        max_tokens=settings.LLM_MAX_TOKENS,
+        max_tokens=kwargs.pop("max_tokens", settings.LLM_MAX_TOKENS),
         **kwargs,
     )
     logger.debug("已创建 LLM 实例: model=%s, base_url=%s", settings.LLM_MODEL, settings.LLM_BASE_URL)

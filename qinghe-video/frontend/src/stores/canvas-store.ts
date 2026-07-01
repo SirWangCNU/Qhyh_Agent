@@ -23,6 +23,7 @@ import {
   type Viewport,
 } from "@xyflow/react";
 import { STORAGE_KEYS } from "@/lib/constants";
+import { STORYBOARD_BOARD_PROMPT } from "@/lib/storyboardBoardPrompt";
 import type { CanvasNode, CanvasNodeData } from "@/components/canvas/types";
 
 /** 自动保存状态。 */
@@ -75,6 +76,8 @@ interface CanvasState {
   storyboardAssets: StoryboardAssets;
   /** 故事板整体旁白文本（来自工坊 copywriter.full_script）。 */
   storyboardVoiceover: string;
+  /** 段级导演板系统提示词（默认前端 STORYBOARD_BOARD_PROMPT，可编辑）。 */
+  systemPrompt: string;
 
   // ---- 项目级动作 ----
   loadProject: (p: LoadedProject) => void;
@@ -96,6 +99,8 @@ interface CanvasState {
   setMode: (mode: "free" | "storyboard") => void;
   setStoryboardAssets: (assets: StoryboardAssets) => void;
   setStoryboardVoiceover: (text: string) => void;
+  /** 设置画布级段级导演板系统提示词。 */
+  setSystemPrompt: (text: string) => void;
   /** 载入故事板项目（含素材库与旁白）。 */
   loadStoryboardProject: (
     project: LoadedProject,
@@ -165,11 +170,14 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   mode: "free",
   storyboardAssets: {},
   storyboardVoiceover: "",
+  systemPrompt: STORYBOARD_BOARD_PROMPT,
 
   loadProject: (p) => {
-    // 从节点列表推断画布模式：包含 shot 节点则视为故事板
-    const hasShot = p.nodes.some(
-      (n) => (n.data as { kind?: string }).kind === "shot",
+    // 从节点列表推断画布模式：含 shot 或 segment 节点则视为故事板
+    const hasStoryboard = p.nodes.some(
+      (n) =>
+        (n.data as { kind?: string }).kind === "shot" ||
+        (n.data as { kind?: string }).kind === "segment",
     );
     set({
       projectId: p.id,
@@ -181,7 +189,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       dirty: false,
       saveStatus: "idle",
       selectedNodeId: null,
-      mode: hasShot ? "storyboard" : "free",
+      mode: hasStoryboard ? "storyboard" : "free",
     });
     persistSession(p.id, p.name);
   },
@@ -200,6 +208,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       mode: "free",
       storyboardAssets: {},
       storyboardVoiceover: "",
+      systemPrompt: STORYBOARD_BOARD_PROMPT,
     });
     persistSession(id, name);
   },
@@ -219,6 +228,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       mode: "free",
       storyboardAssets: {},
       storyboardVoiceover: "",
+      systemPrompt: STORYBOARD_BOARD_PROMPT,
     });
     persistSession(id, "");
   },
@@ -250,6 +260,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       mode: "free",
       storyboardAssets: {},
       storyboardVoiceover: "",
+      systemPrompt: STORYBOARD_BOARD_PROMPT,
     });
     persistSession(null, "");
   },
@@ -270,6 +281,9 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
   setStoryboardVoiceover: (text) =>
     set({ storyboardVoiceover: text, dirty: true, saveStatus: "idle" }),
 
+  setSystemPrompt: (text) =>
+    set({ systemPrompt: text, dirty: true, saveStatus: "idle" }),
+
   loadStoryboardProject: (project, assets, voiceover) => {
     set({
       projectId: project.id,
@@ -284,6 +298,7 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
       mode: "storyboard",
       storyboardAssets: assets,
       storyboardVoiceover: voiceover,
+      systemPrompt: STORYBOARD_BOARD_PROMPT,
     });
     persistSession(project.id, project.name);
   },

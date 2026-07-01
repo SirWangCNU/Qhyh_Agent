@@ -68,7 +68,7 @@ export default {
         lg: "0 12px 40px rgba(31, 31, 31, 0.08)",
       },
       maxWidth: {
-        content: "1200px",
+        content: "1400px",
       },
       keyframes: {
         "fade-in-up": {

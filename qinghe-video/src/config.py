@@ -51,6 +51,10 @@ class Settings(BaseSettings):
     IMAGE_RESPONSE_FORMAT: str = "url"
     VIDEO_MODEL: str = "doubao-seedance-2-0-260128"
     VIDEO_SIZE: str = "1280x720"
+
+    # ---------- 图片编辑生成配置（gpt-image-2） ----------
+    IMAGE_EDIT_API_URL: str = "https://aiapiall.com/v1/images/generations"
+    IMAGE_EDIT_API_KEY: str = ""
     # 前端可选的图片模型列表（逗号分隔），未配置时回退为 [IMAGE_MODEL]。
     # 供无限画布生成节点的模型下拉框使用。
     IMAGE_MODEL_OPTIONS: str = ""

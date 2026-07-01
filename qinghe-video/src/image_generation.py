@@ -77,6 +77,10 @@ class ImageGenerationRequest(BaseModel):
         description="可选参考图路径（相对 URL 如 /outputs/image/xxx.jpg 或纯文件名），"
         "存在则走图生图保证与参考图一致性",
     )
+    title: str | None = Field(
+        None,
+        description="资产标题，未指定时取 prompt 前 80 字符",
+    )
 
 
 class ImageGenerationResult(BaseModel):
@@ -133,10 +137,65 @@ async def generate_image(request: ImageGenerationRequest) -> list[ImageGeneratio
             payload["image"] = _encode_to_b64(ref_bytes, mime)
 
     base_url = settings.APILINK_API_BASE_URL.rstrip("/")
-    async with httpx.AsyncClient(timeout=180) as client:
+    async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
         response = await client.post(
             f"{base_url}/v1/images/generations",
             headers={"Authorization": f"Bearer {settings.AIAPIAL_API_KEY}"},
+            json=payload,
+        )
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError(response.text) from exc
+
+    data = response.json().get("data", [])
+    return [ImageGenerationResult.model_validate(item) for item in data]
+
+
+# ---------- gpt-image-2 图片编辑生成 ----------
+
+
+class EditImageGenerationRequest(BaseModel):
+    """gpt-image-2 图片编辑/生成请求。"""
+
+    prompt: str = Field(..., min_length=1, description="图片描述提示词")
+    size: str | None = Field(None, description="图像尺寸，如 2K")
+    aspect_ratio: str | None = Field(None, description="图像宽高比，如 1:1")
+    n: int = Field(1, ge=1, le=4, description="生成数量")
+    model: str = Field("gpt-image-2", description="模型 id")
+    image: list[str] | None = Field(None, description="可选参考图 URL 列表")
+    watermark: bool = Field(False, description="是否添加水印")
+    title: str | None = Field(
+        None,
+        description="资产标题，未指定时取 prompt 前 80 字符",
+    )
+
+
+async def generate_edit_image(request: EditImageGenerationRequest) -> list[ImageGenerationResult]:
+    """调用 gpt-image-2 图片编辑生成接口。
+
+    使用 settings.IMAGE_EDIT_API_URL 与 IMAGE_EDIT_API_KEY，
+    按 curl 示例格式发送 JSON 请求，返回图片结果列表。
+    """
+    if not settings.IMAGE_EDIT_API_KEY:
+        raise ValueError("未配置 IMAGE_EDIT_API_KEY")
+
+    payload: dict[str, Any] = {
+        "model": request.model,
+        "prompt": request.prompt,
+        "size": request.size,
+        "aspect_ratio": request.aspect_ratio,
+        "n": request.n,
+        "watermark": request.watermark,
+    }
+    if request.image:
+        payload["image"] = request.image
+
+    async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
+        response = await client.post(
+            settings.IMAGE_EDIT_API_URL,
+            headers={"Authorization": f"Bearer {settings.IMAGE_EDIT_API_KEY}"},
             json=payload,
         )
 
@@ -232,6 +291,10 @@ async def generate_with_references(
     })
     # #endregion
 
+    # gpt-image-2 分支：调用独立编辑生成接口
+    if model and "gpt-image-2" in model:
+        return await _generate_with_references_gpt(prompt, content_refs, style_refs, structure_refs, size, model)
+
     if not settings.AIAPIAL_API_KEY:
         raise ValueError("未配置 AIAPIAL_API_KEY")
 
@@ -305,7 +368,7 @@ async def generate_with_references(
     _report_debug("C", "image_generation.py:generate_with_references", "调用图片生成 API", {"base_url": base_url})
     # #endregion
     t0 = time.time()
-    async with httpx.AsyncClient(timeout=180) as client:
+    async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
         try:
             response = await client.post(
                 f"{base_url}/v1/images/generations",
@@ -358,3 +421,47 @@ async def generate_with_references(
             (_CANVAS_OUTPUT_DIR / filename).write_bytes(base64.b64decode(b64_json))
             return f"/outputs/image/{filename}"
         raise RuntimeError("API 返回数据无 url 也无 b64_json")
+
+
+async def _generate_with_references_gpt(
+    prompt: str,
+    content_refs: list[str] | None,
+    style_refs: list[str] | None,
+    structure_refs: list[str] | None,
+    size: str | None,
+    model: str,
+) -> str:
+    """gpt-image-2 版本的参考图生成：复用 edit-generate 网关。"""
+    ref_urls: list[str] = []
+    for ref_url in (content_refs or []) + (style_refs or []) + (structure_refs or []):
+        if ref_url and ref_url.startswith("/outputs/"):
+            ref_urls.append(ref_url)
+
+    extra_notes: list[str] = []
+    if style_refs:
+        extra_notes.append(f"参考{len(style_refs)}张风格图保持色调与艺术风格一致")
+    if structure_refs:
+        extra_notes.append(f"参考{len(structure_refs)}张结构图保持构图与透视")
+    final_prompt = f"{prompt}（{'；'.join(extra_notes)}）" if extra_notes else prompt
+
+    results = await generate_edit_image(
+        EditImageGenerationRequest(
+            model=model,
+            prompt=final_prompt,
+            size=size or settings.IMAGE_SIZE,
+            n=1,
+            image=ref_urls or None,
+            watermark=False,
+        )
+    )
+    result = results[0]
+    if result.url:
+        async with httpx.AsyncClient(timeout=180, trust_env=False) as dl_client:
+            return await _download_image_to_local(dl_client, result.url)
+    if result.b64_json:
+        _CANVAS_OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+        ts = int(time.time() * 1000)
+        filename = f"canvas_{ts}.jpg"
+        (_CANVAS_OUTPUT_DIR / filename).write_bytes(base64.b64decode(result.b64_json))
+        return f"/outputs/image/{filename}"
+    raise RuntimeError("API 返回数据无 url 也无 b64_json")

@@ -8,8 +8,8 @@
  * - running 时禁用按钮；error 时显示错误文案；done 时显示结果图
  */
 import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { Sparkles, Loader2, ImageIcon } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { Sparkles, Loader2, ImageIcon, Film } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCanvasStore } from "@/stores/canvas-store";
@@ -18,9 +18,8 @@ import {
   GENERATE_STATUS_META,
   type ShotNodeData,
 } from "@/components/canvas/types";
-import { cn } from "@/lib/utils";
 
-export function ShotNode({ id, data, selected }: NodeProps) {
+export function ShotNode({ id, data }: NodeProps) {
   const d = data as ShotNodeData;
   const updateNodeData = useCanvasStore((s) => s.updateNodeData);
   const { generateShot, isGenerating } = useCanvasStoryboard();
@@ -31,26 +30,26 @@ export function ShotNode({ id, data, selected }: NodeProps) {
   const displayImage = d.resultImageUrl || d.referenceImageUrl;
 
   return (
-    <Card
-      className={cn(
-        "w-64 gap-0 p-0 shadow-md",
-        selected && "ring-2 ring-primary",
-      )}
-    >
-      {/* 顶部：镜号标题 + 状态徽章 */}
-      <div className="flex items-center justify-between border-b bg-orange-50/60 px-2.5 py-1.5 dark:bg-orange-950/20">
-        <input
-          value={d.title}
-          onChange={(e) => updateNodeData(id, { title: e.target.value })}
-          className="w-32 bg-transparent text-xs font-medium text-foreground outline-none focus:border-b focus:border-primary"
-          disabled={running}
-        />
-        <Badge variant={statusMeta.variant} className="text-[10px]">
+    <Card className="w-64 gap-0 p-0 shadow-md">
+      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 border-b bg-orange-500/5 px-2.5 py-1.5">
+        <CardTitle className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
+          <Film className="h-3.5 w-3.5 shrink-0 text-orange-500" />
+          <span className="shrink-0 rounded bg-orange-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-orange-600">
+            SHOT
+          </span>
+          <input
+            value={d.title}
+            onChange={(e) => updateNodeData(id, { title: e.target.value })}
+            className="min-w-0 flex-1 bg-transparent text-xs font-medium text-foreground outline-none focus:border-b focus:border-orange-500"
+            disabled={running}
+          />
+        </CardTitle>
+        <Badge variant={statusMeta.variant} className="shrink-0 text-[10px]">
           {statusMeta.label}
         </Badge>
-      </div>
+      </CardHeader>
 
-      <div className="space-y-2 p-2.5">
+      <CardContent className="space-y-2 p-2.5">
         {/* 画面描述 */}
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">
@@ -63,7 +62,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
             }
             placeholder="本镜画面描述…"
             disabled={running}
-            className="h-20 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-20 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
@@ -77,7 +76,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
             onChange={(e) => updateNodeData(id, { narration: e.target.value })}
             placeholder="本镜旁白文本…"
             disabled={running}
-            className="h-12 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-12 w-full resize-none rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
           />
         </div>
 
@@ -98,7 +97,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
                 })
               }
               disabled={running}
-              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-8 w-full rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
             />
           </div>
           <div className="flex-1 space-y-1">
@@ -115,7 +114,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
                 })
               }
               disabled={running}
-              className="h-8 w-full rounded-md border border-input bg-background px-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+              className="h-8 w-full rounded-md border border-input bg-background px-1 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-orange-500 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <option value="">自动</option>
               <option value="character">人物</option>
@@ -130,10 +129,10 @@ export function ShotNode({ id, data, selected }: NodeProps) {
           <img
             src={displayImage}
             alt={d.title}
-            className={cn(
-              "h-28 w-full rounded border object-contain",
-              d.resultImageUrl && "ring-1 ring-emerald-400/50",
-            )}
+            className={
+              "h-28 w-full rounded border object-contain" +
+              (d.resultImageUrl ? " ring-1 ring-emerald-400/50" : "")
+            }
           />
         ) : (
           <div className="flex h-20 w-full items-center justify-center rounded border border-dashed text-muted-foreground">
@@ -144,7 +143,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
         {/* 生成按钮 */}
         <Button
           size="sm"
-          className="h-8 w-full text-xs"
+          className="h-8 w-full bg-orange-600 text-xs hover:bg-orange-700"
           disabled={running || !d.visualPrompt.trim()}
           onClick={() => generateShot(id)}
         >
@@ -172,7 +171,7 @@ export function ShotNode({ id, data, selected }: NodeProps) {
             {d.error}
           </p>
         )}
-      </div>
+      </CardContent>
 
       <Handle
         type="target"

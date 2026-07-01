@@ -170,3 +170,59 @@ class StoryboardComposeResult(BaseModel):
     video_url: str | None = None
     audio_url: str | None = None
     error: str | None = None
+
+
+# ============================================================
+# 段级故事板（Segment-level Director Board）模型
+# ============================================================
+
+
+class SegmentInput(BaseModel):
+    """单个故事板片段输入（段级导演板图生成）。
+
+    与 ShotInput（shot 级分镜图）的区别：
+    - 产物是一张含 SHOT GRID / CAMERA RHYTHM / SOUND BEAT 等布局的"导演板图"，
+      而非单镜分镜图。
+    - 提示词由 system_prompt + storyboard_text 拼接，直接喂生图模型（不经 LLM 翻译）。
+    - 参考图统一用画布级 character/object/scene_ref，不单独绑定。
+    """
+
+    segment_id: str = Field(..., description="片段 id（来自 scriptwriter_output.segments）")
+    storyboard_text: str = Field(..., min_length=1, description="04b 故事板文本")
+    system_prompt: str | None = Field(
+        None,
+        description="段级导演板系统提示词；未传则用后端默认 STORYBOARD_BOARD_PROMPT",
+    )
+    title: str = Field("", description="片段标题，如「片段 1」")
+    node_id: str | None = Field(
+        None, description="前端 StoryboardSegmentNode 节点 id，用于回写状态与结果图"
+    )
+
+
+class SegmentGenerateRequest(BaseModel):
+    """段级故事板批量生成请求。"""
+
+    segments: list[SegmentInput] = Field(..., min_length=1, description="片段列表")
+    character_ref: str | None = Field(None, description="人物一致性参考图 URL")
+    object_ref: str | None = Field(None, description="物品一致性参考图 URL")
+    scene_ref: str | None = Field(None, description="场景一致性参考图 URL")
+    size: str | None = Field(None, description="图片尺寸，如 1920x1920")
+    model: str | None = Field(None, description="图片模型 id")
+    concurrency: int = Field(3, ge=1, le=8, description="并发数上限")
+
+
+class SegmentGenerateResult(BaseModel):
+    """段级生成单条结果。"""
+
+    node_id: str
+    status: GenerateStatus
+    result_image_url: str | None = None
+    error: str | None = None
+
+
+class SegmentGenerateResponse(BaseModel):
+    """段级故事板批量生成结果。"""
+
+    results: list[SegmentGenerateResult] = Field(
+        default_factory=list, description="每个片段的生成结果（顺序与请求一致）"
+    )

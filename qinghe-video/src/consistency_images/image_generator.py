@@ -92,7 +92,7 @@ async def generate_consistency_image(
         size,
         mode,
     )
-    async with httpx.AsyncClient(timeout=180.0) as client:
+    async with httpx.AsyncClient(timeout=180.0, trust_env=False) as client:
         try:
             resp = await client.post(
                 f"{base_url}/v1/images/generations",

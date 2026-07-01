@@ -1,11 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { RotateCcw, LayoutGrid, Loader2, Plus, Check, CloudOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useRunAgentStep } from "@/hooks/use-agents";
 import { useTextPolish } from "@/hooks/use-text-polish";
 import { useTopicGeneration } from "@/hooks/use-topic-generation";
-import { useCreateCanvasProject } from "@/hooks/use-canvas";
 import {
   useCreateWorkshopSession,
   useWorkshopSession,
@@ -20,17 +19,8 @@ import {
   type NodeKey,
 } from "@/lib/constants";
 import { useWorkshopStore } from "@/stores/workshop-store";
-import { useCanvasStore } from "@/stores/canvas-store";
-import { useCanvasStoryboard } from "@/components/canvas/hooks/useCanvasStoryboard";
+import { useExportStoryboardToCanvas } from "@/components/canvas/hooks/useExportStoryboardToCanvas";
 import { WorkshopStepList } from "@/components/workshop/WorkshopStepList";
-import type {
-  CopywriterOutput,
-  ScriptwriterOutput,
-  VisualOutput,
-  ShotPrompt,
-  StoryboardPayload,
-  StoryboardShot,
-} from "@/types/api";
 
 /**
  * 分步 Agent 工坊（#/workshop）— Auto Video Agent 模式。
@@ -48,15 +38,12 @@ export function WorkshopPage() {
   const runAgentStep = useRunAgentStep();
   const textPolish = useTextPolish();
   const topicGeneration = useTopicGeneration();
-  const createCanvasProject = useCreateCanvasProject();
-  const storyboard = useCanvasStoryboard();
+  const storyboardExport = useExportStoryboardToCanvas();
   const sessionQuery = useWorkshopSession(
     urlSessionId && urlSessionId !== store.sessionId ? urlSessionId : null,
   );
   const createSession = useCreateWorkshopSession();
   const navigate = useNavigate();
-  const [storyboardExporting, setStoryboardExporting] = useState(false);
-  const [storyboardError, setStoryboardError] = useState<string | null>(null);
 
   // 自动保存：监听 dirty，debounce 2s 后 PUT 到后端
   useWorkshopAutosave();
@@ -168,17 +155,6 @@ export function WorkshopPage() {
       }
     }
     return null;
-  }
-
-  /** 从 copywriter_output 提取旁白文本 */
-  function extractVoiceoverText(): string {
-    const co = store.workshopState.copywriter_output as CopywriterOutput | undefined;
-    if (co?.full_script) return co.full_script;
-    if (co?.body?.length) {
-      return co.body.map((b) => b.text).join("\n");
-    }
-    if (co?.hook?.text) return co.hook.text;
-    return "";
   }
 
   /** 执行单个步骤（根据类型调用对应 API） */
@@ -306,89 +282,9 @@ export function WorkshopPage() {
     await executeStep(key);
   }
 
-  /**
-   * 构造从工坊到画布的故事板 payload。
-   *
-   * 以 scriptwriter.shots 为基准（提供镜号、旁白、时长、画面描述）。
-   * 若存在 visual_output.shot_prompts（历史数据），优先按 shot_id 匹配更精细的画面提示词；
-   * 否则直接回退到 scriptwriter 中的 visual_description。
-   *
-   * 返回 null 表示数据不完整（调用方应禁用按钮）。
-   */
-  function buildStoryboardPayload(): StoryboardPayload | null {
-    const sw = store.workshopState.scriptwriter_output as
-      | ScriptwriterOutput
-      | undefined;
-    if (!sw?.shots?.length) return null;
-
-    const vo = store.workshopState.visual_output as VisualOutput | undefined;
-    const promptMap = vo?.shot_prompts?.length
-      ? new Map(vo.shot_prompts.map((p) => [p.shot_id, p]))
-      : new Map<string, ShotPrompt>();
-    const fallbackPrompts = vo?.shot_prompts ?? [];
-
-    const shots: StoryboardShot[] = sw.shots.map((s, idx) => {
-      const sp = promptMap.get(s.shot_id) ?? fallbackPrompts[idx];
-      return {
-        shot_id: s.shot_id,
-        title: `分镜 ${idx + 1}`,
-        visual_prompt: sp?.prompt ?? s.visual_description ?? "",
-        narration: s.voiceover ?? "",
-        duration: s.duration_seconds ?? 3.5,
-      };
-    });
-
-    const m = store.mediaResults;
-    return {
-      shots,
-      character_ref: m.characterImage?.url ?? undefined,
-      object_ref: m.objectImage?.url ?? undefined,
-      scene_ref: m.sceneImage?.url ?? undefined,
-      voiceover_text: extractVoiceoverText() || undefined,
-    };
-  }
-
-  /**
-   * 一键将工坊分镜导出到无限画布故事板模式。
-   *
-   * 流程：构造 payload → 创建新画布项目 → loadProject → loadFromWorkshop（追加 ShotNode 阵列、设置素材库与旁白）→ 跳转 /canvas。
-   */
-  async function handleExportToCanvas(): Promise<void> {
-    const payload = buildStoryboardPayload();
-    if (!payload) {
-      setStoryboardError("请先完成「脚本」步骤");
-      return;
-    }
-    setStoryboardExporting(true);
-    setStoryboardError(null);
-    try {
-      const res = await createCanvasProject.mutateAsync({
-        name: `故事板 ${store.form.product_name || ""} ${new Date().toLocaleString("zh-CN", { hour12: false })}`.trim(),
-        nodes: [],
-        edges: [],
-        viewport: { x: 0, y: 0, zoom: 1 },
-      });
-      const canvasStore = useCanvasStore.getState();
-      canvasStore.loadProject({
-        id: res.id,
-        name: res.name,
-        nodes: res.nodes,
-        edges: res.edges,
-        viewport: res.viewport,
-      });
-      storyboard.loadFromWorkshop(payload);
-      navigate(ROUTES.canvas);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setStoryboardError(`导出失败：${msg}`);
-    } finally {
-      setStoryboardExporting(false);
-    }
-  }
-
   // 故事板导出按钮显示条件：脚本步骤已完成且 payload 可构造
   const canExportStoryboard =
-    store.steps.scriptwriter === "done" && !!buildStoryboardPayload();
+    store.steps.scriptwriter === "done" && storyboardExport.canExport;
 
   return (
     <section className="container-app py-10">
@@ -469,10 +365,10 @@ export function WorkshopPage() {
           <Button
             size="sm"
             className="shrink-0"
-            disabled={storyboardExporting || store.isStepRunning}
-            onClick={() => void handleExportToCanvas()}
+            disabled={storyboardExport.exporting || store.isStepRunning}
+            onClick={() => void storyboardExport.exportToCanvas()}
           >
-            {storyboardExporting ? (
+            {storyboardExport.exporting ? (
               <>
                 <Loader2 size={14} className="animate-spin" /> 导出中
               </>
@@ -484,9 +380,9 @@ export function WorkshopPage() {
           </Button>
         </div>
       )}
-      {storyboardError && (
+      {storyboardExport.error && (
         <p className="mt-2 rounded bg-destructive/10 px-2 py-1 text-xs text-destructive">
-          {storyboardError}
+          {storyboardExport.error}
         </p>
       )}
 

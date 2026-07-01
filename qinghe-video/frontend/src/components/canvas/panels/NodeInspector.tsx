@@ -31,6 +31,7 @@ import {
   type GenerateNodeData,
   type ImageNodeData,
   type PromptNodeData,
+  type PromptRole,
   type ReferenceImageNodeData,
   type ShotNodeData,
 } from "@/components/canvas/types";
@@ -254,12 +255,39 @@ function PromptEditor({
   data: PromptNodeData;
   updateNodeData: UpdateFn;
 }) {
+  const role: PromptRole = data.role ?? "generic";
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm">✍️ 提示词</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-2.5">
+        <div className="space-y-1">
+          <label className="text-[11px] font-medium text-muted-foreground">
+            角色
+          </label>
+          <Select
+            value={role}
+            onValueChange={(v) =>
+              updateNodeData(id, { role: v as PromptRole })
+            }
+          >
+            <SelectTrigger className="h-8 text-xs">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="generic" className="text-xs">
+                ✍️ 通用提示词
+              </SelectItem>
+              <SelectItem value="storyboard" className="text-xs">
+                📜 故事板文本
+              </SelectItem>
+              <SelectItem value="system" className="text-xs">
+                ⚙️ 系统提示词
+              </SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
         <Textarea
           value={data.prompt}
           onChange={(e) => updateNodeData(id, { prompt: e.target.value })}

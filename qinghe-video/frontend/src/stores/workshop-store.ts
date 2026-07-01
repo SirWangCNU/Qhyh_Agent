@@ -93,6 +93,8 @@ interface WorkshopState {
   setConsistencyImage: (type: ConsistencyImageType, slot: ConsistencyImageSlot | null) => void;
   /** 把某类一致性主体描述写入 workshopState.consistency_references，供画布故事板注入。 */
   setConsistencyReferences: (type: ConsistencyImageType, subject: string) => void;
+  /** 更新某个故事板片段的导演板图 URL（segment_id 定位）。 */
+  setStoryboardBoardImage: (segmentId: number, imageUrl: string) => void;
   setAutoRunToStep: (step: number) => void;
   setCurrentStep: (key: WorkshopStepKey) => void;
   setAutoRunning: (running: boolean) => void;
@@ -300,6 +302,29 @@ export const useWorkshopStore = create<WorkshopState>((set, get) => ({
       dirty: true,
       saveStatus: "idle",
     }));
+    persist(get());
+  },
+
+  setStoryboardBoardImage: (segmentId, imageUrl) => {
+    set((s) => {
+      const sw = s.workshopState.scriptwriter_output;
+      // 无 scriptwriter_output 或 segments 时直接返回，避免误建空对象
+      if (!sw || !Array.isArray(sw.segments) || sw.segments.length === 0) {
+        return {};
+      }
+      // 深拷贝 scriptwriter_output 与 segments，避免 zustand 浅比较不触发渲染
+      const newSw = { ...sw };
+      const newSegments = sw.segments.map((seg) => ({ ...seg }));
+      const target = newSegments.find((seg) => seg.segment_id === segmentId);
+      if (!target) return {};
+      target.storyboard_board_image_url = imageUrl;
+      newSw.segments = newSegments;
+      return {
+        workshopState: { ...s.workshopState, scriptwriter_output: newSw },
+        dirty: true,
+        saveStatus: "idle",
+      };
+    });
     persist(get());
   },
 

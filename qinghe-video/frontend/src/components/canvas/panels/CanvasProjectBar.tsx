@@ -6,7 +6,8 @@
  * - 右：删除按钮（Dialog 二次确认）
  */
 import { useEffect, useState } from "react";
-import { Plus, Trash2, Folder } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { ArrowLeft, Plus, Trash2, Folder } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -46,6 +47,7 @@ const SAVE_STATUS_META: Record<
 };
 
 export function CanvasProjectBar() {
+  const navigate = useNavigate();
   const projectId = useCanvasStore((s) => s.projectId);
   const name = useCanvasStore((s) => s.name);
   const saveStatus = useCanvasStore((s) => s.saveStatus);
@@ -110,6 +112,15 @@ export function CanvasProjectBar() {
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-3 border-b bg-card px-3">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="h-8 w-8 shrink-0 p-0"
+        onClick={() => navigate(-1)}
+        title="返回上一页"
+      >
+        <ArrowLeft className="h-4 w-4" />
+      </Button>
       {/* 左：项目名 + 保存状态 */}
       <div className="flex items-center gap-2">
         <Folder className="h-4 w-4 text-muted-foreground" />

@@ -2,6 +2,7 @@
  * 结果图节点。
  *
  * - 左侧 target Handle：接收生成节点的出边
+ * - 右侧 source Handle：可拉线到生成节点，作为参考图输入
  * - 展示生成结果图 + 下载链接 + 新窗口打开
  * - 空态显示「等待生成」
  */
@@ -11,8 +12,9 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import type { ImageNodeData } from "@/components/canvas/types";
 import { cn } from "@/lib/utils";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
-export function ImageNode({ data, selected }: NodeProps) {
+export function ImageNode({ id, data, selected }: NodeProps) {
   const d = data as ImageNodeData;
   const BACKEND = (import.meta.env.VITE_BACKEND_URL ?? "").replace(/\/+$/, "");
 
@@ -22,10 +24,11 @@ export function ImageNode({ data, selected }: NodeProps) {
   return (
     <Card
       className={cn(
-        "w-60 gap-0 overflow-hidden p-0 shadow-md",
+        "group relative w-60 gap-0 overflow-hidden p-0 shadow-md",
         selected && "ring-2 ring-primary",
       )}
     >
+      <NodeDeleteButton nodeId={id} />
       <div className="flex items-center gap-1.5 border-b bg-muted/40 px-2.5 py-1.5">
         <span className="text-xs">📷 图片{label}</span>
       </div>
@@ -84,6 +87,11 @@ export function ImageNode({ data, selected }: NodeProps) {
       <Handle
         type="target"
         position={Position.Left}
+        className="!h-3 !w-3 !border-2 !border-background !bg-primary"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
         className="!h-3 !w-3 !border-2 !border-background !bg-primary"
       />
     </Card>

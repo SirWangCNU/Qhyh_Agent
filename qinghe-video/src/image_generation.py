@@ -19,39 +19,6 @@ from pydantic import BaseModel, Field
 
 from src.config import PROJECT_ROOT, settings
 
-# #region debug-point setup:debug-reporter
-_DEBUG_ENV_PATH = os.path.join(PROJECT_ROOT, ".dbg", "canvas-two-refs-disconnect.env")
-_DEBUG_SERVER_URL = "http://127.0.0.1:7777/event"
-_DEBUG_SESSION_ID = "canvas-two-refs-disconnect"
-try:
-    with open(_DEBUG_ENV_PATH, "r", encoding="utf-8") as _f:
-        for _line in _f:
-            if _line.startswith("DEBUG_SERVER_URL="):
-                _DEBUG_SERVER_URL = _line.strip().split("=", 1)[1]
-            elif _line.startswith("DEBUG_SESSION_ID="):
-                _DEBUG_SESSION_ID = _line.strip().split("=", 1)[1]
-except Exception:
-    pass
-
-
-def _report_debug(hypothesis_id: str, location: str, msg: str, data: dict | None = None, run_id: str = "pre-fix") -> None:
-    try:
-        payload = json.dumps({
-            "sessionId": _DEBUG_SESSION_ID,
-            "runId": run_id,
-            "hypothesisId": hypothesis_id,
-            "location": location,
-            "msg": f"[DEBUG] {msg}",
-            "data": data or {},
-        }).encode("utf-8")
-        urllib.request.urlopen(
-            urllib.request.Request(_DEBUG_SERVER_URL, data=payload, headers={"Content-Type": "application/json"}),
-            timeout=2,
-        ).read()
-    except Exception:
-        pass
-# #endregion
-
 # 参考图文件扩展名 → MIME 映射
 _EXT_TO_MIME: dict[str, str] = {
     ".jpg": "image/jpeg",
@@ -191,8 +158,10 @@ async def generate_edit_image(request: EditImageGenerationRequest) -> list[Image
     }
     if request.image:
         payload["image"] = request.image
-
-    async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
+    # gpt-image-2 多参考图生图：请求体大（base64）+ 服务器生成慢，需要更长 timeout
+    # connect 短（连接快）、read 长（等生成，5 分钟）、write 适中（上传 base64）
+    edit_timeout = httpx.Timeout(connect=30, read=300, write=120, pool=60)
+    async with httpx.AsyncClient(timeout=edit_timeout, trust_env=False) as client:
         response = await client.post(
             settings.IMAGE_EDIT_API_URL,
             headers={"Authorization": f"Bearer {settings.IMAGE_EDIT_API_KEY}"},
@@ -280,17 +249,6 @@ async def generate_with_references(
     Returns:
         本地图片 URL /outputs/image/canvas_xxx.jpg
     """
-    # #region debug-point C:generate-entry
-    _report_debug("C", "image_generation.py:generate_with_references", "generate_with_references 入口", {
-        "content_refs": content_refs,
-        "style_refs": style_refs,
-        "structure_refs": structure_refs,
-        "size": size,
-        "model": model,
-        "has_api_key": bool(settings.AIAPIAL_API_KEY),
-    })
-    # #endregion
-
     # gpt-image-2 分支：调用独立编辑生成接口
     if model and "gpt-image-2" in model:
         return await _generate_with_references_gpt(prompt, content_refs, style_refs, structure_refs, size, model)
@@ -345,28 +303,8 @@ async def generate_with_references(
             if resolved is not None:
                 ref_bytes, mime = resolved
                 payload["image"] = _encode_to_b64(ref_bytes, mime)
-
-    # #region debug-point C:image-array
-    _report_debug("C", "image_generation.py:generate_with_references", "参考图数组", {
-        "content_images_count": len(content_images_b64),
-        "image_field_type": "list" if isinstance(payload.get("image"), list) else type(payload.get("image")).__name__,
-    })
-    # #endregion
-
     payload_size_mb = len(json.dumps(payload).encode("utf-8")) / 1024 / 1024
-    # #region debug-point C:payload-ready
-    _report_debug("C", "image_generation.py:generate_with_references", "请求体就绪", {
-        "payload_size_mb": round(payload_size_mb, 2),
-        "has_image": "image" in payload,
-        "model": effective_model,
-        "size": payload["size"],
-    })
-    # #endregion
-
     base_url = settings.APILINK_API_BASE_URL.rstrip("/")
-    # #region debug-point C:before-api-call
-    _report_debug("C", "image_generation.py:generate_with_references", "调用图片生成 API", {"base_url": base_url})
-    # #endregion
     t0 = time.time()
     async with httpx.AsyncClient(timeout=180, trust_env=False) as client:
         try:
@@ -376,35 +314,14 @@ async def generate_with_references(
                 json=payload,
             )
         except Exception as e:
-            # #region debug-point C:api-call-exception
-            _report_debug("C", "image_generation.py:generate_with_references", "API 调用异常", {
-                "error": str(e),
-                "error_type": type(e).__name__,
-                "elapsed_sec": round(time.time() - t0, 2),
-            })
-            # #endregion
             raise
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
-            # #region debug-point C:api-http-error
-            _report_debug("C", "image_generation.py:generate_with_references", "API HTTP 错误", {
-                "status_code": response.status_code,
-                "response_text": response.text,
-                "elapsed_sec": round(time.time() - t0, 2),
-            })
-            # #endregion
             raise RuntimeError(response.text) from exc
 
         elapsed = round(time.time() - t0, 2)
         data = response.json().get("data", [])
-        # #region debug-point C:api-response
-        _report_debug("C", "image_generation.py:generate_with_references", "API 响应", {
-            "elapsed_sec": elapsed,
-            "data_count": len(data),
-            "first_item_keys": list(data[0].keys()) if data else [],
-        })
-        # #endregion
         if not data:
             raise RuntimeError("图片生成 API 未返回数据")
 
@@ -423,6 +340,29 @@ async def generate_with_references(
         raise RuntimeError("API 返回数据无 url 也无 b64_json")
 
 
+def _local_url_to_data_uri(url: str) -> str | None:
+    """把 /outputs/xxx 本地相对 URL 转成 base64 data URI。
+
+    远程网关无法访问本地文件，必须转成 data URI。
+    复用 seedream 路径的 _resolve_output_image + _encode_to_b64。
+    返回 None 表示转换失败（文件不存在/格式不支持等）。
+    """
+    resolved = _resolve_output_image(url)
+    if resolved is None:
+        return None
+    file_bytes, mime = resolved
+    return _encode_to_b64(file_bytes, mime)
+
+
+# 参考图类型标签（按顺序对应 character/object/scene）
+_GPT_REF_TYPE_LABELS = ["人物参考", "物品参考", "场景参考"]
+_GPT_REF_TYPE_HINTS = {
+    "人物参考": "脸部特征与身份",
+    "物品参考": "物品外观与材质",
+    "场景参考": "场景环境与氛围",
+}
+
+
 async def _generate_with_references_gpt(
     prompt: str,
     content_refs: list[str] | None,
@@ -431,18 +371,49 @@ async def _generate_with_references_gpt(
     size: str | None,
     model: str,
 ) -> str:
-    """gpt-image-2 版本的参考图生成：复用 edit-generate 网关。"""
-    ref_urls: list[str] = []
+    """gpt-image-2 版本的参考图生成：复用 edit-generate 网关。
+
+    与 seedream 路径的区别：
+    1. 本地 /outputs/ URL 必须转成 base64 data URI（网关无法访问本地文件）
+    2. content_refs 按顺序注入"图1=人物参考/图2=物品参考/图3=场景参考"文字说明到 prompt 开头
+    """
+    # 收集 image payload：本地 URL → data URI；公网 URL 直传
+    image_payload: list[str] = []
     for ref_url in (content_refs or []) + (style_refs or []) + (structure_refs or []):
-        if ref_url and ref_url.startswith("/outputs/"):
-            ref_urls.append(ref_url)
+        if not ref_url:
+            continue
+        if ref_url.startswith("/outputs/"):
+            data_uri = _local_url_to_data_uri(ref_url)
+            if data_uri:
+                image_payload.append(data_uri)
+        elif ref_url.startswith("http"):
+            image_payload.append(ref_url)
+    # prompt 开头注入 content 参考图类型说明（人物/物品/场景）
+    ref_notes: list[str] = []
+    for i, ref_url in enumerate(content_refs or []):
+        if not ref_url:
+            continue
+        label = _GPT_REF_TYPE_LABELS[i] if i < len(_GPT_REF_TYPE_LABELS) else f"补充参考{i + 1}"
+        hint = _GPT_REF_TYPE_HINTS.get(label, "相关特征")
+        ref_notes.append(f"第{i + 1}张图为{label}，请保持该图中的{hint}一致")
 
     extra_notes: list[str] = []
     if style_refs:
         extra_notes.append(f"参考{len(style_refs)}张风格图保持色调与艺术风格一致")
     if structure_refs:
         extra_notes.append(f"参考{len(structure_refs)}张结构图保持构图与透视")
-    final_prompt = f"{prompt}（{'；'.join(extra_notes)}）" if extra_notes else prompt
+
+    if ref_notes:
+        uploaded_note = f"以下是我已上传的{len(ref_notes)}张参考图，请直接用于生成，不要要求再次上传：\n"
+        ref_block = uploaded_note + "\n".join(ref_notes)
+        if extra_notes:
+            ref_block += "\n其他要求：" + "；".join(extra_notes)
+        ref_block += "\n生成一张："
+        final_prompt = f"{ref_block}\n{prompt}"
+    elif extra_notes:
+        final_prompt = f"{prompt}（{'；'.join(extra_notes)}）"
+    else:
+        final_prompt = prompt
 
     results = await generate_edit_image(
         EditImageGenerationRequest(
@@ -450,7 +421,7 @@ async def _generate_with_references_gpt(
             prompt=final_prompt,
             size=size or settings.IMAGE_SIZE,
             n=1,
-            image=ref_urls or None,
+            image=image_payload or None,
             watermark=False,
         )
     )

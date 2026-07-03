@@ -28,7 +28,7 @@ from src.assets import assets_router, record_asset, url_to_local_path
 from src.auth.dependencies import get_current_user
 from src.canvas.router import router as canvas_router
 from src.auth.router import router as auth_router
-from src.config import settings
+from src.config import get_video_model_options, settings
 from src.consistency_images import consistency_images_router
 from src.db.database import get_db
 from src.db.models import User
@@ -44,7 +44,7 @@ from src.text_polish import PolishRequest, polish_user_input
 from src.topic_generation import TopicRequest, generate_topics
 from src.tts_service import synthesize as tts_synthesize, _synthesize_async
 from src.video_compose import compose as compose_video
-from src.video_generation import VideoGenerationRequest, build_video_preview
+from src.video_generation import VideoGenerationRequest, VideoGenerationResponse, generate_video
 from src.video_mvp import VideoMvpRequest, video_mvp as run_video_mvp
 from src.workshop_sessions.router import router as workshop_sessions_router
 
@@ -267,10 +267,24 @@ async def generate_edit_image_asset(payload: EditImageGenerationRequest, _curren
     }
 
 
-@app.post("/api/videos/generate", summary="生成视频素材预览")
-def generate_video_asset(payload: VideoGenerationRequest, _current_user: User = Depends(get_current_user)) -> dict[str, Any]:
-    """返回视频生成展示配置；真实视频生成协议接入后替换此实现。"""
-    return build_video_preview(payload)
+@app.post("/api/videos/generate", summary="生成视频素材")
+async def generate_video_asset(
+    payload: VideoGenerationRequest,
+    _current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """提交视频生成任务并轮询直到完成，返回本地 video_url。"""
+    try:
+        result = await generate_video(payload)
+    except Exception as e:
+        logger.exception("[video] 视频生成失败")
+        return VideoGenerationResponse(status="error", error=str(e)).model_dump()
+    return result.model_dump()
+
+
+@app.get("/api/videos/models", summary="列出可选视频模型")
+def list_video_models(_current_user: User = Depends(get_current_user)) -> list[str]:
+    """返回前端生成节点可选的视频模型列表。"""
+    return get_video_model_options()
 
 
 # ---------- TTS 配音 ----------

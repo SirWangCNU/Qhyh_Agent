@@ -23,9 +23,11 @@ import { useCanvasStore } from "@/stores/canvas-store";
 import { useCanvasUpload } from "@/hooks/use-canvas";
 import {
   REF_TYPE_OPTIONS,
+  SEGMENT_REF_TYPE_OPTIONS,
   type ReferenceImageNodeData,
 } from "@/components/canvas/types";
 import { cn } from "@/lib/utils";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
 export function ReferenceImageNode({ id, data, selected }: NodeProps) {
   const d = data as ReferenceImageNodeData;
@@ -52,10 +54,11 @@ export function ReferenceImageNode({ id, data, selected }: NodeProps) {
   return (
     <Card
       className={cn(
-        "w-60 gap-0 overflow-hidden p-0 shadow-md",
+        "group relative w-60 gap-0 overflow-hidden p-0 shadow-md",
         selected && "ring-2 ring-primary",
       )}
     >
+      <NodeDeleteButton nodeId={id} disabled={upload.isPending} />
       {/* 头部：维度选择 + 颜色点 */}
       <div className="flex items-center gap-2 border-b bg-muted/40 px-2 py-1.5">
         <span
@@ -85,6 +88,36 @@ export function ReferenceImageNode({ id, data, selected }: NodeProps) {
           </SelectContent>
         </Select>
       </div>
+
+      {/* 段级故事板：人物/物品/场景分类（仅 content 维度时显示） */}
+      {d.refType === "content" && (
+        <div className="flex items-center gap-2 border-b bg-muted/30 px-2 py-1">
+          <span className="text-[10px] text-muted-foreground">段类型</span>
+          <Select
+            value={d.segmentRefType ?? "character"}
+            onValueChange={(v) =>
+              updateNodeData(id, {
+                segmentRefType: v as ReferenceImageNodeData["segmentRefType"],
+              })
+            }
+          >
+            <SelectTrigger className="h-6 border-0 bg-transparent px-1 text-xs shadow-none focus:ring-0">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SEGMENT_REF_TYPE_OPTIONS.map((o) => (
+                <SelectItem key={o.value} value={o.value}>
+                  <span
+                    className="mr-1.5 inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: o.color }}
+                  />
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
 
       {/* 中部：图片预览 / 上传 */}
       <div className="relative flex h-40 items-center justify-center bg-muted/20">

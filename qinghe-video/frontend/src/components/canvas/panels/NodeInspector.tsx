@@ -19,14 +19,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useCanvasStore } from "@/stores/canvas-store";
-import { useCanvasUpload, useCanvasModels } from "@/hooks/use-canvas";
+import { useCanvasUpload, useCanvasModels, useCanvasVideoModels } from "@/hooks/use-canvas";
 import {
+  FALLBACK_MODEL,
   FALLBACK_MODEL_OPTIONS,
+  FALLBACK_VIDEO_MODEL,
+  FALLBACK_VIDEO_MODEL_OPTIONS,
   GENERATE_STATUS_META,
+  IMAGE_SIZE_OPTIONS,
   MODE_OPTIONS,
   REF_TYPE_OPTIONS,
   SHOT_REF_TYPE_OPTIONS,
-  SIZE_OPTIONS,
+  VIDEO_RATIO_OPTIONS,
+  VIDEO_SIZE_OPTIONS,
   type CanvasNodeData,
   type GenerateNodeData,
   type ImageNodeData,
@@ -34,6 +39,7 @@ import {
   type PromptRole,
   type ReferenceImageNodeData,
   type ShotNodeData,
+  type VideoNodeData,
 } from "@/components/canvas/types";
 import { PromptMentionTextarea } from "@/components/canvas/shared/PromptMentionTextarea";
 
@@ -140,6 +146,13 @@ export function NodeInspector() {
           {(node.data as { kind: string }).kind === "image" && (
             <ImageEditor
               data={node.data as ImageNodeData}
+              backend={BACKEND}
+            />
+          )}
+
+          {(node.data as { kind: string }).kind === "video" && (
+            <VideoEditor
+              data={node.data as VideoNodeData}
               backend={BACKEND}
             />
           )}
@@ -309,14 +322,28 @@ function GenerateEditor({
   updateNodeData: UpdateFn;
 }) {
   const statusMeta = GENERATE_STATUS_META[data.status] ?? GENERATE_STATUS_META.idle;
-  const modelsQuery = useCanvasModels();
-  const modelOptions =
-    modelsQuery.data && modelsQuery.data.length > 0
-      ? modelsQuery.data
+  const isVideo = data.mode === "video";
+
+  const imageModelsQuery = useCanvasModels();
+  const videoModelsQuery = useCanvasVideoModels();
+  const modelOptions = isVideo
+    ? videoModelsQuery.data && videoModelsQuery.data.length > 0
+      ? videoModelsQuery.data
+      : FALLBACK_VIDEO_MODEL_OPTIONS
+    : imageModelsQuery.data && imageModelsQuery.data.length > 0
+      ? imageModelsQuery.data
       : FALLBACK_MODEL_OPTIONS;
+  const sizeOptions = isVideo ? VIDEO_SIZE_OPTIONS : IMAGE_SIZE_OPTIONS;
+
   const model = data.model ?? "";
   const prompt = data.prompt ?? "";
   const negativePrompt = data.negative_prompt ?? "";
+
+  const ratio = data.ratio ?? "9:16";
+  const duration = Number(data.duration ?? 8);
+  const generateAudio = data.generate_audio ?? true;
+  const watermark = data.watermark ?? false;
+
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -337,13 +364,16 @@ function GenerateEditor({
           </label>
           <Select
             value={data.mode}
-            onValueChange={(v) =>
+            onValueChange={(v) => {
+              const mode = v as GenerateNodeData["mode"];
               updateNodeData(id, {
-                mode: v as GenerateNodeData["mode"],
+                mode,
                 status: "idle",
                 error: undefined,
-              })
-            }
+                size: mode === "video" ? "720p" : "1024x1024",
+                model: mode === "video" ? FALLBACK_VIDEO_MODEL : FALLBACK_MODEL,
+              });
+            }}
           >
             <SelectTrigger className="h-8 text-xs">
               <SelectValue className="truncate" />
@@ -381,7 +411,7 @@ function GenerateEditor({
         </div>
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">
-            输出尺寸
+            {isVideo ? "分辨率" : "输出尺寸"}
           </label>
           <Select
             value={data.size}
@@ -391,7 +421,7 @@ function GenerateEditor({
               <SelectValue className="truncate" />
             </SelectTrigger>
             <SelectContent>
-              {SIZE_OPTIONS.map((s) => (
+              {sizeOptions.map((s) => (
                 <SelectItem key={s} value={s} className="text-xs">
                   {s}
                 </SelectItem>
@@ -399,6 +429,78 @@ function GenerateEditor({
             </SelectContent>
           </Select>
         </div>
+
+        {isVideo && (
+          <>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                宽高比
+              </label>
+              <Select
+                value={ratio}
+                onValueChange={(v) =>
+                  updateNodeData(id, { ratio: v })
+                }
+              >
+                <SelectTrigger className="h-8 text-xs">
+                  <SelectValue className="truncate" />
+                </SelectTrigger>
+                <SelectContent>
+                  {VIDEO_RATIO_OPTIONS.map((r) => (
+                    <SelectItem key={r} value={r} className="text-xs">
+                      {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[11px] font-medium text-muted-foreground">
+                时长（秒）
+              </label>
+              <Input
+                type="number"
+                min={3}
+                max={15}
+                step={1}
+                value={duration}
+                onChange={(e) =>
+                  updateNodeData(id, { duration: Number(e.target.value) })
+                }
+                className="h-8 text-xs"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={`${id}-generate-audio`}
+                checked={generateAudio}
+                onChange={(e) =>
+                  updateNodeData(id, { generate_audio: e.target.checked })
+                }
+                className="h-3.5 w-3.5 rounded border-gray-300"
+              />
+              <label htmlFor={`${id}-generate-audio`} className="text-[11px] font-medium text-muted-foreground">
+                生成音频
+              </label>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id={`${id}-watermark`}
+                checked={watermark}
+                onChange={(e) =>
+                  updateNodeData(id, { watermark: e.target.checked })
+                }
+                className="h-3.5 w-3.5 rounded border-gray-300"
+              />
+              <label htmlFor={`${id}-watermark`} className="text-[11px] font-medium text-muted-foreground">
+                添加水印
+              </label>
+            </div>
+          </>
+        )}
+
         <div className="space-y-1">
           <label className="text-[11px] font-medium text-muted-foreground">
             提示词（输入 @ 引用图片）
@@ -493,6 +595,52 @@ function ImageEditor({
           </>
         ) : (
           <p className="text-xs text-muted-foreground">暂无结果图</p>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function VideoEditor({
+  data,
+  backend,
+}: {
+  data: VideoNodeData;
+  backend: string;
+}) {
+  const label = data.label || (data.index ? String(data.index) : "结果视频");
+  const fullUrl = data.videoUrl ? `${backend}${data.videoUrl}` : null;
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="text-sm">🎬 视频{label}</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2.5">
+        {fullUrl ? (
+          <>
+            <video
+              src={fullUrl}
+              controls
+              className="h-40 w-full rounded border object-contain"
+              preload="metadata"
+            />
+            <div className="flex gap-1.5">
+              <Button asChild variant="outline" size="sm" className="h-8 flex-1 text-xs">
+                <a href={fullUrl} download target="_blank" rel="noreferrer">
+                  <Download className="mr-1 h-3.5 w-3.5" />
+                  下载
+                </a>
+              </Button>
+              <Button asChild variant="outline" size="sm" className="h-8 flex-1 text-xs">
+                <a href={fullUrl} target="_blank" rel="noreferrer">
+                  <ExternalLink className="mr-1 h-3.5 w-3.5" />
+                  打开
+                </a>
+              </Button>
+            </div>
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">暂无结果视频</p>
         )}
       </CardContent>
     </Card>

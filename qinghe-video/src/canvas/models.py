@@ -16,6 +16,9 @@ RefType = Literal["content", "style", "structure", "pose"]
 # 生成节点状态
 GenerateStatus = Literal["idle", "running", "done", "error"]
 
+# 生成模式
+GenerateMode = Literal["image", "video"]
+
 
 class CanvasProjectCreate(BaseModel):
     """创建画布项目请求。"""
@@ -71,12 +74,13 @@ class GenerateRequest(BaseModel):
     前端收集生成节点的所有入边源节点数据后组装此请求。
     """
     node_id: str = Field(..., description="要触发的生成节点 id")
+    mode: GenerateMode = Field(default="image", description="生成模式：image / video")
     references: list[ReferenceInput] = Field(default_factory=list, description="参考图列表")
     prompt: str = Field(..., min_length=1, description="正向提示词")
     negative_prompt: str | None = Field(None, description="负向提示词")
     params: dict[str, Any] = Field(
         default_factory=dict,
-        description="生成参数：size / model / n 等",
+        description="生成参数：size / model / duration / ratio / resolution / generate_audio / watermark 等",
     )
 
 
@@ -85,6 +89,7 @@ class GenerateResult(BaseModel):
     node_id: str
     status: GenerateStatus
     result_image_url: str | None = None
+    result_video_url: str | None = None
     error: str | None = None
 
 

@@ -11,13 +11,15 @@
  */
 import { useCanvasGenerateMutation } from "@/hooks/use-canvas";
 import { useCanvasStore } from "@/stores/canvas-store";
-import { makeImageNode } from "@/components/canvas/nodeFactory";
+import { makeImageNode, makeVideoNode } from "@/components/canvas/nodeFactory";
 import { resolvePromptMentions } from "@/components/canvas/shared/promptMention";
 import type { ReferenceInputDTO } from "@/hooks/use-canvas";
 import type {
   GenerateNodeData,
+  ImageNodeData,
   PromptNodeData,
   ReferenceImageNodeData,
+  VideoNodeData,
 } from "@/components/canvas/types";
 
 /** 计算下一个结果图序号：当前画布 image 节点最大 index + 1。 */
@@ -25,6 +27,17 @@ function nextImageIndex(nodes: { data: { kind?: string; index?: number } }[]): n
   let max = 0;
   for (const n of nodes) {
     if ((n.data as { kind?: string }).kind !== "image") continue;
+    const idx = (n.data as { index?: number }).index ?? 0;
+    if (idx > max) max = idx;
+  }
+  return max + 1;
+}
+
+/** 计算下一个结果视频序号：当前画布 video 节点最大 index + 1。 */
+function nextVideoIndex(nodes: { data: { kind?: string; index?: number } }[]): number {
+  let max = 0;
+  for (const n of nodes) {
+    if ((n.data as { kind?: string }).kind !== "video") continue;
     const idx = (n.data as { index?: number }).index ?? 0;
     if (idx > max) max = idx;
   }
@@ -51,26 +64,30 @@ export function useCanvasGenerate() {
 
     const genData = genNode.data as GenerateNodeData;
 
-    if (genData.mode === "video") {
-      updateNodeData(generateNodeId, {
-        status: "error",
-        error: "视频生成暂未接入",
-      } as Partial<GenerateNodeData>);
-      return;
-    }
-
     // 收集入边源节点
     const incomingNodes = edges
       .filter((e) => e.target === generateNodeId)
       .map((e) => nodes.find((n) => n.id === e.source))
       .filter((n): n is NonNullable<typeof n> => !!n);
 
-    // 1. 参考图（连线接入）
+    // 1. 参考图（连线接入）：referenceImage / image / video 节点均可作为参考图输入
     const wiredReferences: ReferenceInputDTO[] = incomingNodes
-      .filter((n) => (n.data as { kind: string }).kind === "referenceImage")
-      .map((n) => {
-        const d = n.data as ReferenceImageNodeData;
-        return { image_url: d.imageUrl ?? "", ref_type: d.refType };
+      .filter((n) => {
+        const kind = (n.data as { kind: string }).kind;
+        return kind === "referenceImage" || kind === "image" || kind === "video";
+      })
+      .map((n): ReferenceInputDTO => {
+        const kind = (n.data as { kind: string }).kind;
+        if (kind === "referenceImage") {
+          const d = n.data as ReferenceImageNodeData;
+          return { image_url: d.imageUrl ?? "", ref_type: d.refType };
+        }
+        if (kind === "image") {
+          const d = n.data as ImageNodeData;
+          return { image_url: d.imageUrl ?? "", ref_type: "content" };
+        }
+        const d = n.data as VideoNodeData;
+        return { image_url: d.videoUrl ?? "", ref_type: "content" };
       })
       .filter((r) => r.image_url);
 
@@ -117,36 +134,71 @@ export function useCanvasGenerate() {
         projectId,
         body: {
           node_id: generateNodeId,
+          mode: genData.mode,
           references,
           prompt: finalPrompt,
           negative_prompt: negativePrompt,
-          params: {
-            size: genData.size,
-            model: genData.model || undefined,
-          },
+          params:
+            genData.mode === "video"
+              ? {
+                  model: genData.model || undefined,
+                  resolution: genData.size,
+                  ratio: genData.ratio ?? "9:16",
+                  duration: genData.duration ?? 8,
+                  generate_audio: genData.generate_audio ?? true,
+                  watermark: genData.watermark ?? false,
+                }
+              : {
+                  size: genData.size,
+                  model: genData.model || undefined,
+                },
         },
       });
 
-      if (res.status === "done" && res.result_image_url) {
+      if (res.status === "done") {
         updateNodeData(generateNodeId, {
           status: "done",
           error: undefined,
         } as Partial<GenerateNodeData>);
-        // 计算下一个图片序号并创建结果图节点
-        const idx = nextImageIndex(nodes);
-        const { node: imageNode } = makeImageNode(
-          res.result_image_url,
-          genNode.position,
-          generateNodeId,
-          idx,
-        );
-        addNode(imageNode);
-        addEdgeRaw({
-          id: `e-${generateNodeId}-${imageNode.id}`,
-          source: generateNodeId,
-          target: imageNode.id,
-          animated: true,
-        });
+
+        if (res.result_image_url) {
+          // 计算下一个图片序号并创建结果图节点
+          const idx = nextImageIndex(nodes);
+          const { node: imageNode } = makeImageNode(
+            res.result_image_url,
+            genNode.position,
+            generateNodeId,
+            idx,
+          );
+          addNode(imageNode);
+          addEdgeRaw({
+            id: `e-${generateNodeId}-${imageNode.id}`,
+            source: generateNodeId,
+            target: imageNode.id,
+            animated: true,
+          });
+        } else if (res.result_video_url) {
+          // 计算下一个视频序号并创建结果视频节点
+          const idx = nextVideoIndex(nodes);
+          const { node: videoNode } = makeVideoNode(
+            res.result_video_url,
+            genNode.position,
+            generateNodeId,
+            idx,
+          );
+          addNode(videoNode);
+          addEdgeRaw({
+            id: `e-${generateNodeId}-${videoNode.id}`,
+            source: generateNodeId,
+            target: videoNode.id,
+            animated: true,
+          });
+        } else {
+          updateNodeData(generateNodeId, {
+            status: "error",
+            error: res.error ?? "生成失败",
+          } as Partial<GenerateNodeData>);
+        }
       } else {
         updateNodeData(generateNodeId, {
           status: "error",

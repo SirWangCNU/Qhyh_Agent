@@ -20,7 +20,6 @@ import {
   Clapperboard,
   Sparkles,
   Loader2,
-  ImageIcon,
   CheckCircle2,
   AlertCircle,
   FileText,
@@ -49,6 +48,7 @@ import {
 } from "@/components/ui/select";
 import { useCanvasModels } from "@/hooks/use-canvas";
 import { cn } from "@/lib/utils";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
 export function StoryboardSegmentNode({ id, data }: NodeProps) {
   const d = data as SegmentNodeData;
@@ -69,7 +69,8 @@ export function StoryboardSegmentNode({ id, data }: NodeProps) {
   const hasStoryboardInput = inputs.hasStoryboard || !!d.storyboardText?.trim();
 
   return (
-    <Card className="w-80 gap-0 p-0 shadow-md">
+    <Card className="group relative w-80 gap-0 p-0 shadow-md">
+      <NodeDeleteButton nodeId={id} disabled={running} />
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 border-b bg-amber-500/5 px-2.5 py-1.5">
         <CardTitle className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
           <Clapperboard className="h-3.5 w-3.5 shrink-0 text-amber-500" />
@@ -139,16 +140,11 @@ export function StoryboardSegmentNode({ id, data }: NodeProps) {
           </Select>
         </div>
 
-        {/* 结果图区：object-contain 无黑边，自适应高度 */}
-        {d.resultImageUrl ? (
-          <img
-            src={d.resultImageUrl}
-            alt={d.title}
-            className="max-h-72 w-full rounded border object-contain ring-1 ring-amber-400/50"
-          />
-        ) : (
-          <div className="flex h-24 w-full items-center justify-center rounded border border-dashed text-muted-foreground">
-            <ImageIcon className="h-6 w-6" />
+        {/* 结果指示：生成成功后只显示一行简短状态，图片在独立 image 节点展示 */}
+        {d.status === "done" && d.resultImageUrl && (
+          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1 text-[11px] text-emerald-700">
+            <CheckCircle2 className="h-3 w-3 shrink-0" />
+            <span className="truncate">已生成 → 右侧结果图节点</span>
           </div>
         )}
 

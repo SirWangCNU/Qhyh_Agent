@@ -2,7 +2,7 @@
  * 生成节点。
  *
  * - 左侧 target Handle：接收参考图 / 提示词节点的入边
- * - 右侧 source Handle：可拉线到结果图节点（结果图通常由生成成功后自动创建）
+ * - 右侧 source Handle：可拉线到结果图 / 结果视频节点
  * - 节点内置：生成类型 / 模型 / 尺寸 / 提示词 / 负向提示词 + 生成按钮 + 状态 Badge
  * - 提示词输入支持 `@` 引用画布图片素材（PromptMentionTextarea）
  * - running 时禁用按钮；error 时显示错误文案
@@ -22,16 +22,22 @@ import {
 } from "@/components/ui/select";
 import { useCanvasStore } from "@/stores/canvas-store";
 import { useCanvasGenerate } from "@/components/canvas/hooks/useCanvasGenerate";
-import { useCanvasModels } from "@/hooks/use-canvas";
+import { useCanvasModels, useCanvasVideoModels } from "@/hooks/use-canvas";
 import { PromptMentionTextarea } from "@/components/canvas/shared/PromptMentionTextarea";
 import {
+  FALLBACK_MODEL,
   FALLBACK_MODEL_OPTIONS,
+  FALLBACK_VIDEO_MODEL,
+  FALLBACK_VIDEO_MODEL_OPTIONS,
   GENERATE_STATUS_META,
+  IMAGE_SIZE_OPTIONS,
   MODE_OPTIONS,
-  SIZE_OPTIONS,
+  VIDEO_RATIO_OPTIONS,
+  VIDEO_SIZE_OPTIONS,
   type GenerateNodeData,
 } from "@/components/canvas/types";
 import { cn } from "@/lib/utils";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
 export function GenerateNode({ id, data, selected }: NodeProps) {
   const d = data as GenerateNodeData;
@@ -44,23 +50,31 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
   const prompt = d.prompt ?? "";
   const negativePrompt = d.negative_prompt ?? "";
 
-  const modelsQuery = useCanvasModels();
-  const modelOptions =
-    modelsQuery.data && modelsQuery.data.length > 0
-      ? modelsQuery.data
+  const isVideo = d.mode === "video";
+
+  const imageModelsQuery = useCanvasModels();
+  const videoModelsQuery = useCanvasVideoModels();
+  const modelOptions = isVideo
+    ? videoModelsQuery.data && videoModelsQuery.data.length > 0
+      ? videoModelsQuery.data
+      : FALLBACK_VIDEO_MODEL_OPTIONS
+    : imageModelsQuery.data && imageModelsQuery.data.length > 0
+      ? imageModelsQuery.data
       : FALLBACK_MODEL_OPTIONS;
+
+  const sizeOptions = isVideo ? VIDEO_SIZE_OPTIONS : IMAGE_SIZE_OPTIONS;
 
   const statusMeta = GENERATE_STATUS_META[d.status] ?? GENERATE_STATUS_META.idle;
   const running = d.status === "running" || isPending;
-  const isVideo = d.mode === "video";
 
   return (
     <Card
       className={cn(
-        "w-64 gap-0 p-0 shadow-md",
+        "group relative w-64 gap-0 p-0 shadow-md",
         selected && "ring-2 ring-primary",
       )}
     >
+      <NodeDeleteButton nodeId={id} disabled={running} />
       <div className="flex items-center justify-between border-b bg-muted/40 px-2.5 py-1.5">
         <span className="text-xs">⚡ 生成</span>
         <Badge variant={statusMeta.variant} className="text-[10px]">
@@ -74,13 +88,17 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
         </label>
         <Select
           value={d.mode}
-          onValueChange={(v) =>
+          onValueChange={(v) => {
+            const mode = v as GenerateNodeData["mode"];
             updateNodeData(id, {
-              mode: v as GenerateNodeData["mode"],
+              mode,
               status: "idle",
               error: undefined,
-            })
-          }
+              size: mode === "video" ? "720p" : "1024x1024",
+              model:
+                mode === "video" ? FALLBACK_VIDEO_MODEL : FALLBACK_MODEL,
+            });
+          }}
           disabled={running}
         >
           <SelectTrigger className="h-8 text-xs">
@@ -118,7 +136,7 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
         </Select>
 
         <label className="text-[11px] font-medium text-muted-foreground">
-          输出尺寸
+          {isVideo ? "分辨率" : "输出尺寸"}
         </label>
         <Select
           value={d.size}
@@ -129,13 +147,22 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
             <SelectValue className="truncate" />
           </SelectTrigger>
           <SelectContent>
-            {SIZE_OPTIONS.map((s) => (
+            {sizeOptions.map((s) => (
               <SelectItem key={s} value={s} className="text-xs">
                 {s}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
+
+        {isVideo && (
+          <VideoParamsEditor
+            nodeId={id}
+            data={d}
+            disabled={running}
+            onUpdate={updateNodeData}
+          />
+        )}
 
         <label className="text-[11px] font-medium text-muted-foreground">
           提示词（输入 @ 引用图片）
@@ -175,7 +202,7 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
         <Button
           size="sm"
           className="h-8 w-full text-xs"
-          disabled={running || isVideo}
+          disabled={running}
           onClick={() => runGenerate(id)}
         >
           {running ? (
@@ -186,7 +213,7 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
           ) : (
             <>
               <Sparkles className="mr-1 h-3.5 w-3.5" />
-              {isVideo ? "视频生成暂未接入" : "生成"}
+              生成
             </>
           )}
         </Button>
@@ -209,5 +236,89 @@ export function GenerateNode({ id, data, selected }: NodeProps) {
         className="!h-3 !w-3 !border-2 !border-background !bg-primary"
       />
     </Card>
+  );
+}
+
+/** 视频专属参数表单。 */
+function VideoParamsEditor({
+  nodeId,
+  data,
+  disabled,
+  onUpdate,
+}: {
+  nodeId: string;
+  data: GenerateNodeData;
+  disabled: boolean;
+  onUpdate: (id: string, patch: Partial<GenerateNodeData>) => void;
+}) {
+  const ratio = data.ratio ?? "9:16";
+  const duration = Number(data.duration ?? 8);
+  const generateAudio = data.generate_audio ?? true;
+  const watermark = data.watermark ?? false;
+
+  return (
+    <div className="space-y-2">
+      <label className="text-[11px] font-medium text-muted-foreground">
+        宽高比
+      </label>
+      <Select
+        value={ratio}
+        onValueChange={(v) => onUpdate(nodeId, { ratio: v })}
+        disabled={disabled}
+      >
+        <SelectTrigger className="h-8 text-xs">
+          <SelectValue className="truncate" />
+        </SelectTrigger>
+        <SelectContent>
+          {VIDEO_RATIO_OPTIONS.map((r) => (
+            <SelectItem key={r} value={r} className="text-xs">
+              {r}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <label className="text-[11px] font-medium text-muted-foreground">
+        时长（秒）
+      </label>
+      <input
+        type="number"
+        min={3}
+        max={15}
+        step={1}
+        value={duration}
+        disabled={disabled}
+        onChange={(e) =>
+          onUpdate(nodeId, { duration: Number(e.target.value) })
+        }
+        className="h-8 w-full rounded-md border border-input bg-background px-2 py-1.5 text-xs ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+      />
+
+      <label className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={generateAudio}
+          disabled={disabled}
+          onChange={(e) =>
+            onUpdate(nodeId, { generate_audio: e.target.checked })
+          }
+          className="h-3.5 w-3.5 rounded border-gray-300"
+        />
+        生成音频
+      </label>
+
+      <label className="flex items-center gap-2 text-[11px] font-medium text-muted-foreground">
+        <input
+          type="checkbox"
+          checked={watermark}
+          disabled={disabled}
+          onChange={(e) =>
+            onUpdate(nodeId, { watermark: e.target.checked })
+          }
+          className="h-3.5 w-3.5 rounded border-gray-300"
+        />
+        添加水印
+      </label>
+    </div>
   );
 }

@@ -13,6 +13,7 @@ import type {
   PromptRole,
   SegmentNodeData,
   ShotNodeData,
+  VideoNodeData,
 } from "@/components/canvas/types";
 import { FALLBACK_MODEL } from "@/components/canvas/types";
 
@@ -62,6 +63,8 @@ export function defaultNodeData(kind: CanvasNodeKind): CanvasNodeData {
       };
     case "image":
       return { kind: "image", imageUrl: null, label: "", index: 0 };
+    case "video":
+      return { kind: "video", videoUrl: null, label: "", index: 0 };
     case "shot":
       return {
         kind: "shot",
@@ -128,6 +131,32 @@ export function makeImageNode(
   return { node, data };
 }
 
+/** 创建结果视频节点（生成成功后自动放置在生成节点右侧）。
+ *
+ * @param index 结果视频序号（从 1 开始），用于显示「视频一/二…」。
+ */
+export function makeVideoNode(
+  videoUrl: string,
+  genPosition: XYPosition,
+  sourceGenerateNodeId: string,
+  index: number,
+): { node: CanvasNode; data: VideoNodeData } {
+  const data: VideoNodeData = {
+    kind: "video",
+    videoUrl,
+    sourceGenerateNodeId,
+    label: toChineseNumber(index),
+    index,
+  };
+  const node: CanvasNode = {
+    id: makeNodeId(),
+    type: "video",
+    position: { x: genPosition.x + 280, y: genPosition.y + 60 },
+    data,
+  };
+  return { node, data };
+}
+
 // ============================================================
 // 故事板分镜节点
 // ============================================================
@@ -155,12 +184,19 @@ export function makeReferenceImageNode(
   url: string,
   position: XYPosition,
   label = "参考图",
+  segmentRefType?: import("@/components/canvas/types").SegmentRefType,
 ): CanvasNode {
   return {
     id: makeNodeId(),
     type: "referenceImage",
     position,
-    data: { kind: "referenceImage", imageUrl: url, refType: "content", label },
+    data: {
+      kind: "referenceImage",
+      imageUrl: url,
+      refType: "content",
+      segmentRefType,
+      label,
+    },
   };
 }
 

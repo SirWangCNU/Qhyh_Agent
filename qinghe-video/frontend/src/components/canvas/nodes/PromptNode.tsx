@@ -16,6 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useCanvasStore } from "@/stores/canvas-store";
 import type { PromptNodeData, PromptRole } from "@/components/canvas/types";
 import { cn } from "@/lib/utils";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
 /** 角色 → 头部展示元数据。 */
 const ROLE_META: Record<
@@ -36,10 +37,11 @@ export function PromptNode({ id, data, selected }: NodeProps) {
   return (
     <Card
       className={cn(
-        "w-64 gap-0 p-0 shadow-md",
+        "group relative w-64 gap-0 p-0 shadow-md",
         selected && "ring-2 ring-primary",
       )}
     >
+      <NodeDeleteButton nodeId={id} />
       <div
         className={cn(
           "flex items-center gap-1.5 border-b px-2.5 py-1.5",

@@ -10,6 +10,8 @@ import type {
   TTSResponse,
   VideoComposeRequest,
   VideoComposeResponse,
+  VideoGenerationRequest,
+  VideoGenerationResponse,
   VideoMvpRequest,
   VideoMvpResponse,
 } from "@/types/api";
@@ -101,5 +103,13 @@ export function useVideoMvp() {
         method: "POST",
         body: req as unknown as BodyInit,
       }),
+  });
+}
+
+/** 视频生成 hook（POST /api/videos/generate，异步提交 + 轮询）。 */
+export function useGenerateVideo() {
+  return useMutation({
+    mutationFn: (req: VideoGenerationRequest) =>
+      apiPost<VideoGenerationResponse>("/api/videos/generate", req),
   });
 }

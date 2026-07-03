@@ -413,6 +413,29 @@ export interface VideoMvpResponse {
 }
 
 // ============================================================
+// 视频生成（doubao-seedance，异步提交 + 轮询）
+// ============================================================
+
+export interface VideoGenerationRequest {
+  prompt: string;
+  model?: string;
+  reference_images?: string[];
+  resolution?: string;
+  ratio?: string;
+  duration?: number;
+  generate_audio?: boolean;
+  watermark?: boolean;
+  negative_prompt?: string;
+}
+
+export interface VideoGenerationResponse {
+  status: "done" | "error";
+  video_url: string | null;
+  task_id: string | null;
+  error: string | null;
+}
+
+// ============================================================
 // 一致性生图（人物/物品/场景，multipart/form，参考图可选）
 // ============================================================
 

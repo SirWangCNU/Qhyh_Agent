@@ -56,6 +56,8 @@ export default {
         body: ['"DM Sans"', '"PingFang SC"', '"Microsoft YaHei"', "system-ui", "sans-serif"],
         mono: ['"JetBrains Mono"', '"SF Mono"', "Consolas", "monospace"],
         sans: ['"DM Sans"', '"PingFang SC"', '"Microsoft YaHei"', "system-ui", "sans-serif"],
+        instrument: ['"Instrument Serif"', '"Songti SC"', '"Noto Serif SC"', "Georgia", "serif"],
+        geist: ['"Geist"', '"PingFang SC"', '"Microsoft YaHei"', "system-ui", "sans-serif"],
       },
       borderRadius: {
         lg: "var(--radius)",

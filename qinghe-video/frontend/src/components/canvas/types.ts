@@ -21,6 +21,7 @@ export type CanvasNodeKind =
   | "prompt"
   | "generate"
   | "image"
+  | "video"
   | "shot"
   | "segment";
 
@@ -35,10 +36,15 @@ export interface ReferenceImageNodeData {
   kind: "referenceImage";
   imageUrl: string | null;
   refType: RefType;
+  /** 段级故事板专用：人物/物品/场景分类，决定生成时顺序。 */
+  segmentRefType?: SegmentRefType;
   /** 用户可改的备注名。 */
   label: string;
   [key: string]: unknown;
 }
+
+/** 段级故事板参考图类型（用于 gpt-image-2 多参考图顺序）。 */
+export type SegmentRefType = "character" | "object" | "scene";
 
 /** 提示词角色：system=系统提示词 / storyboard=故事板文本 / generic=通用（默认） */
 export type PromptRole = "system" | "storyboard" | "generic";
@@ -56,17 +62,31 @@ export interface PromptNodeData {
 export interface GenerateNodeData {
   kind: "generate";
   status: GenerateStatus;
-  /** 生成类型：图片（已接入 Seedream）/ 视频（暂未接入）。 */
+  /** 生成类型：图片（已接入 Seedream）/ 视频（已接入 Seedance）。 */
   mode: GenerateMode;
-  /** "1024x1024" | "1920x1920" 等。 */
+  /**
+   * 输出尺寸。
+   * - image: "1024x1024" | "1920x1920" 等；
+   * - video: "720p" | "1080p"（向后端映射为 resolution）。
+   */
   size: string;
-  /** 本次生成使用的模型 id（兜底 FALLBACK_MODEL）。 */
+  /** 本次生成使用的模型 id（兜底 FALLBACK_MODEL / FALLBACK_VIDEO_MODEL）。 */
   model: string;
   /** 节点内置主提示词。 */
   prompt: string;
   /** 负向提示词（可选）。 */
   negative_prompt: string;
   error?: string;
+  // 视频专属参数（mode === "video" 时生效）
+  /** 宽高比，如 "9:16"。 */
+  ratio?: string;
+  /** 时长（秒），默认 8。 */
+  duration?: number;
+  /** 是否生成音频，默认 true。 */
+  generate_audio?: boolean;
+  /** 是否添加水印，默认 false。 */
+  watermark?: boolean;
+  // react-flow Node<...> 要求 data 可扩展为 Record<string, unknown>
   [key: string]: unknown;
 }
 
@@ -74,6 +94,19 @@ export interface GenerateNodeData {
 export interface ImageNodeData {
   kind: "image";
   imageUrl: string | null;
+  /** 关联的生成节点 id。 */
+  sourceGenerateNodeId?: string;
+  /** 中文序号标签，如 "一"、"二"。 */
+  label: string;
+  /** 数字序号，从 1 开始。 */
+  index: number;
+  [key: string]: unknown;
+}
+
+/** 结果视频节点数据。 */
+export interface VideoNodeData {
+  kind: "video";
+  videoUrl: string | null;
   /** 关联的生成节点 id。 */
   sourceGenerateNodeId?: string;
   /** 中文序号标签，如 "一"、"二"。 */
@@ -139,6 +172,7 @@ export type CanvasNodeData =
   | PromptNodeData
   | GenerateNodeData
   | ImageNodeData
+  | VideoNodeData
   | ShotNodeData
   | SegmentNodeData;
 
@@ -157,20 +191,36 @@ export const REF_TYPE_OPTIONS: {
   { value: "pose", label: "姿态", color: "#ec4899" },
 ];
 
-/** 生成尺寸选项。 */
-export const SIZE_OPTIONS = [
+/** 图片生成尺寸选项。 */
+export const IMAGE_SIZE_OPTIONS = [
   "1024x1024",
   "1920x1920",
   "1024x1792",
   "1792x1024",
 ];
 
+/** 向后兼容别名：旧代码使用 SIZE_OPTIONS。 */
+export const SIZE_OPTIONS = IMAGE_SIZE_OPTIONS;
+
+/** 视频分辨率选项。 */
+export const VIDEO_SIZE_OPTIONS = ["720p", "1080p"];
+
+/** 视频宽高比选项。 */
+export const VIDEO_RATIO_OPTIONS = ["9:16", "16:9", "1:1"];
+
 /**
- * 模型兜底列表：当后端 /api/canvas/models 不可用时使用。
+ * 图片模型兜底：当后端 /api/canvas/models 不可用时使用。
  * 与后端 settings.IMAGE_MODEL 默认值保持一致。
  */
 export const FALLBACK_MODEL = "doubao-seedream-5-0-260128";
 export const FALLBACK_MODEL_OPTIONS: string[] = [FALLBACK_MODEL];
+
+/**
+ * 视频模型兜底：当后端 /api/canvas/video-models 不可时使用。
+ * 与后端 settings.VIDEO_MODEL 默认值保持一致。
+ */
+export const FALLBACK_VIDEO_MODEL = "doubao-seedance-2-0-260128";
+export const FALLBACK_VIDEO_MODEL_OPTIONS: string[] = [FALLBACK_VIDEO_MODEL];
 
 /** 生成模式选项。 */
 export const MODE_OPTIONS: { value: GenerateMode; label: string }[] = [
@@ -207,6 +257,17 @@ export const SHOT_REF_TYPE_OPTIONS: {
   { value: "scene", label: "场景", color: "#10b981" },
 ];
 
+/** 段级参考图类型选项（用于 ReferenceImageNode 故事板模式）。 */
+export const SEGMENT_REF_TYPE_OPTIONS: {
+  value: SegmentRefType;
+  label: string;
+  color: string;
+}[] = [
+  { value: "character", label: "人物参考", color: "#3b82f6" },
+  { value: "object", label: "物品参考", color: "#f59e0b" },
+  { value: "scene", label: "场景参考", color: "#10b981" },
+];
+
 /** 生成状态 → Badge 配置。 */
 export const GENERATE_STATUS_META: Record<
   GenerateStatus,
@@ -220,10 +281,10 @@ export const GENERATE_STATUS_META: Record<
 
 /**
  * 连线合法性：
- * - 参考图/提示词 → 生成
- * - 生成 → 结果图
+ * - 参考图/提示词/结果图/结果视频/分镜 → 生成
+ * - 生成 → 结果图/结果视频
  * - 参考图/提示词 → 分镜（故事板模式：把素材连到分镜上）
- * - 分镜 → 生成（分镜可作为生成节点的提示词来源）
+ * - 参考图/提示词 → 段级故事板节点
  */
 export function isValidConnection(
   srcKind: string,
@@ -231,11 +292,15 @@ export function isValidConnection(
 ): boolean {
   if (
     tgtKind === "generate" &&
-    (srcKind === "referenceImage" || srcKind === "prompt" || srcKind === "shot")
+    (srcKind === "referenceImage" ||
+      srcKind === "prompt" ||
+      srcKind === "shot" ||
+      srcKind === "image" ||
+      srcKind === "video")
   ) {
     return true;
   }
-  if (tgtKind === "image" && srcKind === "generate") {
+  if ((tgtKind === "image" || tgtKind === "video") && srcKind === "generate") {
     return true;
   }
   if (

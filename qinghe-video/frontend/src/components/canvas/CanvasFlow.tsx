@@ -28,6 +28,7 @@ import { GenerateNode } from "@/components/canvas/nodes/GenerateNode";
 import { ImageNode } from "@/components/canvas/nodes/ImageNode";
 import { ShotNode } from "@/components/canvas/nodes/ShotNode";
 import { StoryboardSegmentNode } from "@/components/canvas/nodes/StoryboardSegmentNode";
+import { VideoNode } from "@/components/canvas/nodes/VideoNode";
 
 /** 节点类型映射（必须定义在组件外，避免每次渲染重建触发 React Flow 警告）。 */
 const nodeTypes = {
@@ -35,6 +36,7 @@ const nodeTypes = {
   prompt: PromptNode,
   generate: GenerateNode,
   image: ImageNode,
+  video: VideoNode,
   shot: ShotNode,
   segment: StoryboardSegmentNode,
 };

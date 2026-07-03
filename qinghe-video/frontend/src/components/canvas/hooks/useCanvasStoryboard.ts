@@ -26,12 +26,15 @@ import {
   makeReferenceImageNode,
   makeSegmentNodes,
   makeShotNodes,
+  makeImageNode,
+  makeNodeId,
   type SegmentImport,
   type ShotImport,
 } from "@/components/canvas/nodeFactory";
 import type {
   CanvasNode,
   CanvasNodeData,
+  ImageNodeData,
   SegmentNodeData,
   ShotNodeData,
 } from "@/components/canvas/types";
@@ -77,6 +80,8 @@ export function collectSegmentInputs(
   let storyboardText = "";
   let systemPrompt = "";
   const contentRefs: string[] = [];
+  // url -> segmentRefType，用于后续按人物/物品/场景排序
+  const refTypeByUrl = new Map<string, import("@/components/canvas/types").SegmentRefType>();
 
   for (const node of incomers) {
     const data = node.data as CanvasNodeData;
@@ -91,13 +96,31 @@ export function collectSegmentInputs(
       }
     } else if (data.kind === "referenceImage" && data.imageUrl) {
       contentRefs.push(data.imageUrl);
+      if (data.segmentRefType) {
+        refTypeByUrl.set(data.imageUrl, data.segmentRefType);
+      }
     }
   }
+
+  // 按段级参考图类型排序：人物 -> 物品 -> 场景，与后端 _generate_with_references_gpt 的
+  // _GPT_REF_TYPE_LABELS 顺序对齐，确保 prompt 中“第1张图为人物参考”等说明与实际图片一致。
+  const typeOrder: Record<import("@/components/canvas/types").SegmentRefType, number> = {
+    character: 0,
+    object: 1,
+    scene: 2,
+  };
+  const sortedRefs = [...contentRefs].sort((a, b) => {
+    const typeA = refTypeByUrl.get(a);
+    const typeB = refTypeByUrl.get(b);
+    const orderA = typeA !== undefined ? typeOrder[typeA] : 99;
+    const orderB = typeB !== undefined ? typeOrder[typeB] : 99;
+    return orderA - orderB;
+  });
 
   return {
     storyboardText,
     systemPrompt,
-    contentRefs,
+    contentRefs: sortedRefs,
     hasStoryboard: !!storyboardText,
     hasSystem: !!systemPrompt,
   };
@@ -252,20 +275,20 @@ export function useCanvasStoryboard() {
       });
 
       // 参考图节点（来自 payload.character_ref / object_ref / scene_ref）
-      // 垂直堆叠在画布左上角
-      const refEntries: Array<{ url: string; label: string }> = [];
-      if (payload.character_ref) {
-        refEntries.push({ url: payload.character_ref, label: "人物参考" });
-      }
-      if (payload.object_ref) {
-        refEntries.push({ url: payload.object_ref, label: "物品参考" });
-      }
-      if (payload.scene_ref) {
-        refEntries.push({ url: payload.scene_ref, label: "场景参考" });
-      }
-      const refNodes = refEntries.map((r, i) =>
-        makeReferenceImageNode(r.url, { x: -600, y: -300 + i * 140 }, r.label),
-      );
+    // 垂直堆叠在画布左上角
+    const refEntries: Array<{ url: string; label: string; segmentRefType: import("@/components/canvas/types").SegmentRefType }> = [];
+    if (payload.character_ref) {
+      refEntries.push({ url: payload.character_ref, label: "人物参考", segmentRefType: "character" });
+    }
+    if (payload.object_ref) {
+      refEntries.push({ url: payload.object_ref, label: "物品参考", segmentRefType: "object" });
+    }
+    if (payload.scene_ref) {
+      refEntries.push({ url: payload.scene_ref, label: "场景参考", segmentRefType: "scene" });
+    }
+    const refNodes = refEntries.map((r, i) =>
+      makeReferenceImageNode(r.url, { x: -600, y: -300 + i * 140 }, r.label, r.segmentRefType),
+    );
 
       // 构造边：每个 prompt/ref 节点 → 对应段节点
       const newEdges: Edge[] = [];
@@ -468,6 +491,56 @@ export function useCanvasStoryboard() {
   }
 
   /**
+   * 确保段节点有一个独立 image 结果节点展示生成图。
+   *
+   * - 已存在同 sourceGenerateNodeId 的 image 节点：更新 imageUrl
+   * - 不存在：在段节点右侧 +350px 创建新 image 节点 + 连接边（segment → image）
+   *
+   * 多次重新生成只更新图，不重复创建节点，避免画布堆积。
+   */
+  function ensureSegmentImageResultNode(
+    segmentNodeId: string,
+    imageUrl: string,
+  ): void {
+    const store = useCanvasStore.getState();
+    const segNode = store.nodes.find((n) => n.id === segmentNodeId);
+    if (!segNode) return;
+
+    // 查找已存在的结果图节点（按 sourceGenerateNodeId 关联）
+    const existing = store.nodes.find((n) => {
+      const d = n.data as ImageNodeData;
+      return d.kind === "image" && d.sourceGenerateNodeId === segmentNodeId;
+    });
+
+    if (existing) {
+      // 更新现有结果图节点
+      store.updateNodeData(existing.id, { imageUrl } as Partial<ImageNodeData>);
+      return;
+    }
+
+    // 创建新结果图节点：放在段节点右侧 +350px
+    const segPos = segNode.position;
+    const { node: imageNode } = makeImageNode(
+      imageUrl,
+      { x: segPos.x + 350, y: segPos.y },
+      segmentNodeId,
+      store.nodes.filter((n) => (n.data as { kind?: string }).kind === "image").length + 1,
+    );
+    store.addNodes([imageNode]);
+
+    // 连接边：segment(source 右) → image(target 左)，虚线表示输出关系
+    store.addEdgeRaw({
+      id: makeNodeId(),
+      source: segmentNodeId,
+      target: imageNode.id,
+      sourceHandle: null,
+      targetHandle: null,
+      animated: false,
+      style: { stroke: "#f59e0b", strokeDasharray: "4 3", strokeWidth: 1.5 },
+    });
+  }
+
+  /**
    * 生成单个段级导演板图。
    *
    * 输入来源（按优先级）：
@@ -539,6 +612,8 @@ export function useCanvasStoryboard() {
           resultImageUrl: result.result_image_url,
           error: undefined,
         } as Partial<SegmentNodeData>);
+        // 创建/更新独立 image 结果节点展示生成图
+        ensureSegmentImageResultNode(segmentNodeId, result.result_image_url);
       } else {
         store.updateNodeData(segmentNodeId, {
           status: "error",
@@ -618,6 +693,8 @@ export function useCanvasStoryboard() {
             resultImageUrl: r.result_image_url,
             error: undefined,
           } as Partial<SegmentNodeData>);
+          // 创建/更新独立 image 结果节点展示生成图
+          ensureSegmentImageResultNode(n.id, r.result_image_url);
         } else {
           store.updateNodeData(n.id, {
             status: "error",

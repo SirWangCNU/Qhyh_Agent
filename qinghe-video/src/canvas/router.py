@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from src.assets import save_uploaded_file
 from src.auth.dependencies import get_current_user
-from src.config import get_image_model_options
+from src.config import get_image_model_options, get_video_model_options
 from src.canvas.models import (
     CanvasProjectCreate,
     CanvasProjectUpdate,
@@ -42,7 +42,7 @@ from src.canvas.persistence import (
     to_response_dict,
     update_project,
 )
-from src.canvas.service import run_generate
+from src.canvas.service import run_generate, _report_video_ascii
 from src.canvas.storyboard_service import (
     batch_generate_segments,
     batch_generate_shots,
@@ -111,6 +111,17 @@ def list_models_api(
     return get_image_model_options()
 
 
+@router.get("/api/canvas/video-models", summary="列出可选视频模型")
+def list_video_models_api(
+    _current_user: User = Depends(get_current_user),
+) -> list[str]:
+    """返回前端生成节点可选的视频模型列表。
+
+    来源：settings.VIDEO_MODEL_OPTIONS（逗号分隔），未配置时回退为 [VIDEO_MODEL]。
+    """
+    return get_video_model_options()
+
+
 # ---------- 项目 CRUD ----------
 
 @router.post("/api/canvas/projects", summary="创建画布项目")
@@ -137,7 +148,24 @@ def list_projects_api(
     db: Session = Depends(get_db),
 ) -> list[dict[str, Any]]:
     """列出当前用户所有画布项目（按更新时间倒序）。"""
-    return list_projects(db, current_user.id)
+    # #region debug-point Z:list-projects
+    try:
+        return list_projects(db, current_user.id)
+    except Exception as e:
+        import traceback as _tb
+
+        _report_video_ascii(
+            "Z",
+            "router.py:list_projects_api:exception",
+            "list_projects exception",
+            {
+                "exc_type": type(e).__name__,
+                "exc_str": str(e),
+                "traceback": _tb.format_exc(),
+            },
+        )
+        raise
+    # #endregion
 
 
 @router.get("/api/canvas/projects/{project_id}", summary="获取画布项目")

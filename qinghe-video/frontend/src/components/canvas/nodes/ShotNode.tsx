@@ -18,6 +18,7 @@ import {
   GENERATE_STATUS_META,
   type ShotNodeData,
 } from "@/components/canvas/types";
+import { NodeDeleteButton } from "@/components/canvas/nodes/shared/NodeDeleteButton";
 
 export function ShotNode({ id, data }: NodeProps) {
   const d = data as ShotNodeData;
@@ -30,7 +31,8 @@ export function ShotNode({ id, data }: NodeProps) {
   const displayImage = d.resultImageUrl || d.referenceImageUrl;
 
   return (
-    <Card className="w-64 gap-0 p-0 shadow-md">
+    <Card className="group relative w-64 gap-0 p-0 shadow-md">
+      <NodeDeleteButton nodeId={id} disabled={running} />
       <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 border-b bg-orange-500/5 px-2.5 py-1.5">
         <CardTitle className="flex min-w-0 items-center gap-1.5 text-xs font-medium">
           <Film className="h-3.5 w-3.5 shrink-0 text-orange-500" />

@@ -49,8 +49,17 @@ class Settings(BaseSettings):
     IMAGE_MODEL: str = "doubao-seedream-5-0-260128"
     IMAGE_SIZE: str = "1920x1920"
     IMAGE_RESPONSE_FORMAT: str = "url"
+
+    # ---------- 视频生成配置（复用 APILINK 网关，但保留独立覆盖能力） ----------
+    VIDEO_API_BASE_URL: str = ""                     # 为空时复用 APILINK_API_BASE_URL
+    VIDEO_API_KEY: str = ""                          # 为空时复用 AIAPIAL_API_KEY
     VIDEO_MODEL: str = "doubao-seedance-2-0-260128"
-    VIDEO_SIZE: str = "1280x720"
+    VIDEO_SIZE: str = "720p"
+    VIDEO_RESPONSE_FORMAT: str = "url"
+    VIDEO_POLL_INTERVAL: int = 5                     # 轮询间隔（秒）
+    VIDEO_POLL_MAX_ATTEMPTS: int = 60                # 最大轮询次数，默认 5 分钟
+    # 前端可选的视频模型列表（逗号分隔），未配置时回退为 [VIDEO_MODEL]
+    VIDEO_MODEL_OPTIONS: str = "doubao-seedance-2-0-260128,doubao-seedance-2-0-fast-260128"
 
     # ---------- 图片编辑生成配置（gpt-image-2） ----------
     IMAGE_EDIT_API_URL: str = "https://aiapiall.com/v1/images/generations"
@@ -128,6 +137,23 @@ def get_system_prompt(prompt_name: str) -> str:
     return get_prompt(prompt_name).replace("{", "{{").replace("}", "}}")
 
 
+def _parse_model_options(raw_options: str, fallback: str) -> list[str]:
+    """解析逗号分隔的模型列表，去重并保留顺序，确保 fallback 在首位。"""
+    raw = raw_options.strip()
+    if not raw:
+        return [fallback]
+    seen: set[str] = set()
+    options: list[str] = []
+    for item in raw.split(","):
+        name = item.strip()
+        if name and name not in seen:
+            seen.add(name)
+            options.append(name)
+    if fallback not in seen:
+        options.insert(0, fallback)
+    return options
+
+
 def get_image_model_options() -> list[str]:
     """解析前端可选的图片模型列表。
 
@@ -137,16 +163,16 @@ def get_image_model_options() -> list[str]:
     Returns:
         list[str]: 可选模型 id 列表，至少包含 1 项。
     """
-    raw = settings.IMAGE_MODEL_OPTIONS.strip()
-    if not raw:
-        return [settings.IMAGE_MODEL]
-    seen: set[str] = set()
-    options: list[str] = []
-    for item in raw.split(","):
-        name = item.strip()
-        if name and name not in seen:
-            seen.add(name)
-            options.append(name)
-    if settings.IMAGE_MODEL not in seen:
-        options.insert(0, settings.IMAGE_MODEL)
-    return options
+    return _parse_model_options(settings.IMAGE_MODEL_OPTIONS, settings.IMAGE_MODEL)
+
+
+def get_video_model_options() -> list[str]:
+    """解析前端可选的视频模型列表。
+
+    优先读取 ``VIDEO_MODEL_OPTIONS``（逗号分隔），为空时回退为 ``[VIDEO_MODEL]``，
+    去重并保留顺序。
+
+    Returns:
+        list[str]: 可选模型 id 列表，至少包含 1 项。
+    """
+    return _parse_model_options(settings.VIDEO_MODEL_OPTIONS, settings.VIDEO_MODEL)

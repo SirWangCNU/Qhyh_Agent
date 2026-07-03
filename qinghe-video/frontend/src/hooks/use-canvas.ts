@@ -64,6 +64,7 @@ export interface ReferenceInputDTO {
 
 export interface GenerateRequestInput {
   node_id: string;
+  mode: "image" | "video";
   references: ReferenceInputDTO[];
   prompt: string;
   negative_prompt?: string;
@@ -74,6 +75,7 @@ export interface GenerateResultDTO {
   node_id: string;
   status: "idle" | "running" | "done" | "error";
   result_image_url: string | null;
+  result_video_url: string | null;
   error: string | null;
 }
 
@@ -203,6 +205,16 @@ export function useCanvasModels() {
   return useQuery<string[]>({
     queryKey: ["canvas", "models"] as const,
     queryFn: () => apiGet<string[]>("/api/canvas/models"),
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+}
+
+/** 获取可选视频模型列表。 GET /api/canvas/video-models */
+export function useCanvasVideoModels() {
+  return useQuery<string[]>({
+    queryKey: ["canvas", "video-models"] as const,
+    queryFn: () => apiGet<string[]>("/api/canvas/video-models"),
     staleTime: 5 * 60 * 1000,
     retry: 1,
   });

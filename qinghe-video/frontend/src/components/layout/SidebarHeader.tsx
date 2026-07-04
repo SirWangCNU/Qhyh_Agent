@@ -7,13 +7,9 @@ interface SidebarHeaderProps {
   onToggle: () => void;
 }
 
-/**
- * 侧边栏头部：仅包含折叠/展开按钮。
- * 品牌触发器在顶部 Header 中（更符合视觉层级）。
- */
 export function SidebarHeader({ collapsed, onToggle }: SidebarHeaderProps) {
   return (
-    <div className="flex h-12 items-center justify-center px-3">
+    <div className="flex h-10 items-center justify-center px-3">
       <button
         type="button"
         onClick={onToggle}
@@ -21,16 +17,16 @@ export function SidebarHeader({ collapsed, onToggle }: SidebarHeaderProps) {
         title={collapsed ? "展开边栏" : "收起边栏"}
         aria-expanded={!collapsed}
         className={cn(
-          "grid h-10 w-10 place-items-center rounded-md text-ink-soft transition-all",
-          "hover:bg-secondary hover:text-ink hover:scale-105 active:scale-95",
+          "grid h-8 w-8 place-items-center rounded-full text-ink-faint transition-colors",
+          "hover:bg-[#ede6d3] hover:text-ink-soft",
         )}
       >
         <motion.span
-          animate={{ rotate: collapsed ? 0 : 90 }}
-          transition={{ duration: 0.2 }}
+          animate={{ opacity: collapsed ? 1 : 0.8 }}
+          transition={{ duration: 0.15 }}
           aria-hidden="true"
         >
-          <Menu size={18} />
+          <Menu size={16} />
         </motion.span>
       </button>
     </div>

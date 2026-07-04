@@ -1,350 +1,359 @@
+/**
+ * 对话创作页（#/chat）— ReAct Agent 模式。
+ *
+ * 视觉方向：温暖自然 · 杂志编辑感
+ * - 深橄榄绿为品牌锚点，金色为高光，奶油色与暖米色构成层次。
+ * - 空状态像一本摊开的创作手册：大标题、漂浮灵感 pill、宽大的创作输入台。
+ * - 对话流以左右气泡呈现，用户消息用橄榄绿渐变，助手答案像带金边的信笺。
+ * - 所有文字完整显示，不截断；图片自适应容器，无黑边。
+ */
+
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Loader2, Film, RefreshCw, Sparkles, ArrowRight } from "lucide-react";
+import {
+  Send,
+  Loader2,
+  RefreshCw,
+  ArrowRight,
+  MessageSquare,
+  Sprout,
+} from "lucide-react";
 import { useAuthStore } from "@/stores/auth-store";
-import { useChatPipeline } from "@/hooks/use-chat-pipeline";
-import { usePlans } from "@/hooks/use-plans";
+import { useConversation } from "@/hooks/use-conversation";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AgentOutputView } from "@/components/agent/AgentOutputView";
-import { resolveMediaUrl } from "@/hooks/use-agents";
+import { ReActMessage } from "@/components/chat/ReActMessage";
+import { FeaturedCard, FEATURED_WORKS } from "@/components/chat/FeaturedCard";
+import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import type { ChatMessage } from "@/types/api";
-import { type NodeKey } from "@/lib/constants";
 
-/** 快捷提示（第二张图顶部 4 个 chip）。 */
 const SUGGESTIONS = [
   "为阳山水蜜桃生成 30 秒抖音视频",
   "为五常大米写一条 60 秒快手口播脚本",
   "为西湖龙井策划一个产地溯源短视频",
   "为赣南脐橙生成适合视频号的投放方案",
+  "为云南普洱茶设计一条品牌故事短片",
 ];
 
-/** 精选作品（第二张图底部 2 列大卡）。 */
-const FEATURED_WORKS = [
-  {
-    title: "安岳柠檬 · 产地溯源",
-    desc: "30 秒抖音短视频，突出黄金产区与手工采摘。",
-    platform: "抖音",
-    duration: "30s",
-    prompt:
-      "cinematic close-up of fresh yellow lemons on a wooden basket in a sunlit citrus orchard, warm morning light, shallow depth of field, realistic photography, no text",
-  },
-  {
-    title: "五常大米 · 品牌故事",
-    desc: "60 秒快手口播脚本，讲述黑土种植到餐桌的旅程。",
-    platform: "快手",
-    duration: "60s",
-    prompt:
-      "aerial view of golden rice paddies in Northeast China, a farmer walking through the field with a straw hat, soft sunset light, cinematic realistic photography, no text",
-  },
-  {
-    title: "西湖龙井 · 春茶上市",
-    desc: "45 秒视频号产地溯源，展现清明前采茶与炒制。",
-    platform: "视频号",
-    duration: "45s",
-    prompt:
-      "close-up of fresh green tea leaves being picked by hand in a misty Longjing tea garden, spring morning dew, realistic photography, no text",
-  },
-  {
-    title: "赣南脐橙 · 果园直发",
-    desc: "30 秒抖音带货脚本，强调现摘现发与甜度保证。",
-    platform: "抖音",
-    duration: "30s",
-    prompt:
-      "ripe orange fruits hanging on trees in an orchard, farmer carrying a basket, golden hour sunlight, realistic photography, no text",
-  },
-];
-
-/**
- * 对话创作页（#/chat）— 第二张图效果：
- *
- * 空状态：
- * - 顶部居中「对话创作」小标签
- * - 大标题：Hi {username}, 和青禾一起聊聊创作想法
- * - 4 个快捷提示 chip
- * - 圆角输入框 + 圆形发送按钮
- * - 底部「精选作品」2 列大卡
- *
- * 有消息后：切换到 ChatGPT 风格消息列表，底部保留输入框。
- */
 export function ChatPage() {
   const [input, setInput] = useState("");
   const [searchParams, setSearchParams] = useSearchParams();
-  const pipeline = useChatPipeline();
-  const { getPlan, updatePlan, createPlan } = usePlans();
+  const navigate = useNavigate();
+  const conversation = useConversation();
   const user = useAuthStore((s) => s.user);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const urlConvIdRef = useRef<string | null>(null);
 
-  // 从 URL 读取预填提示（来自作品广场卡片点击）
+  const urlConvId = searchParams.get("conversationId");
+
+  const loadHistory = conversation.loadHistory;
+  const reset = conversation.reset;
+
+  useEffect(() => {
+    if (urlConvId && urlConvId !== urlConvIdRef.current) {
+      urlConvIdRef.current = urlConvId;
+      void loadHistory(urlConvId);
+    } else if (!urlConvId && urlConvIdRef.current) {
+      urlConvIdRef.current = null;
+      reset();
+    }
+  }, [urlConvId, loadHistory, reset]);
+
   useEffect(() => {
     const seed = searchParams.get("seed");
     if (seed) {
       setInput(seed);
-      searchParams.delete("seed");
-      setSearchParams(searchParams, { replace: true });
-      inputRef.current?.focus();
+      const next = new URLSearchParams(searchParams);
+      next.delete("seed");
+      setSearchParams(next, { replace: true });
+      textareaRef.current?.focus();
     }
   }, [searchParams, setSearchParams]);
 
-  // 从 URL 恢复方案
-  useEffect(() => {
-    const planId = searchParams.get("planId");
-    if (planId) {
-      const plan = getPlan(planId);
-      pipeline.loadPlan(plan);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // 自动滚动到底部
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [pipeline.messages]);
+  }, [conversation.messages]);
 
-  // 持久化到 localStorage（每次消息变化）
   useEffect(() => {
-    if (pipeline.messages.length === 0) return;
-    const planId = searchParams.get("planId");
-    if (planId) {
-      updatePlan(planId, {
-        messages: pipeline.messages,
-        state: pipeline.workshopState,
-      });
+    if (!conversation.conversationId) {
+      if (urlConvId) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("conversationId");
+        setSearchParams(next, { replace: true });
+        urlConvIdRef.current = null;
+      }
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipeline.messages, pipeline.workshopState]);
+    if (urlConvId !== conversation.conversationId) {
+      const next = new URLSearchParams(searchParams);
+      next.set("conversationId", conversation.conversationId);
+      setSearchParams(next, { replace: true });
+      urlConvIdRef.current = conversation.conversationId;
+    }
+  }, [conversation.conversationId, urlConvId, searchParams, setSearchParams]);
+
+  async function ensureConversationAndSend(text: string) {
+    await conversation.sendMessage(text);
+  }
 
   function handleSend() {
     const text = input.trim();
-    if (!text || pipeline.isRunning) return;
-
-    // 若没有 planId，自动创建一个
-    let planId = searchParams.get("planId");
-    if (!planId) {
-      const plan = createPlan();
-      planId = plan.id;
-      updatePlan(plan.id, { title: text.slice(0, 30) });
-      setSearchParams({ planId }, { replace: true });
-    }
-
-    const userInput = pipeline.parseUserInput(text);
+    if (!text || conversation.isRunning) return;
     setInput("");
-    void pipeline.runPipeline(userInput, text);
+    resetTextareaHeight();
+    void ensureConversationAndSend(text);
   }
 
   function handleSuggestion(text: string) {
     setInput(text);
-    inputRef.current?.focus();
-    // 直接触发发送
+    textareaRef.current?.focus();
     setTimeout(() => {
-      const userInput = pipeline.parseUserInput(text);
       setInput("");
-      void pipeline.runPipeline(userInput, text);
+      resetTextareaHeight();
+      void ensureConversationAndSend(text);
     }, 0);
   }
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+  function handleNewConversation() {
+    urlConvIdRef.current = null;
+    conversation.reset();
+    navigate(ROUTES.chat);
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   }
 
-  const isEmpty = pipeline.messages.length === 0;
+  function adjustTextareaHeight(el: HTMLTextAreaElement) {
+    el.style.height = "auto";
+    el.style.height = `${Math.min(el.scrollHeight, 160)}px`;
+  }
+
+  function resetTextareaHeight() {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = "auto";
+    }
+  }
+
+  const isEmpty = conversation.messages.length === 0;
   const username = user?.username ?? "创作者";
 
   return (
-    <section className="flex h-[calc(100vh-64px)] flex-col overflow-hidden">
-      {/* 消息区 / Hero 区 */}
-      <div className="flex-1 overflow-y-auto">
+    <section className="relative flex min-h-[calc(100vh-64px)] flex-col overflow-hidden">
+      <div
+        className="pointer-events-none absolute -left-20 top-0 h-[36rem] w-[36rem] rounded-full opacity-40 blur-[120px]"
+        style={{ background: "radial-gradient(circle, #e8d9b0 0%, transparent 70%)" }}
+        aria-hidden="true"
+      />
+      <div
+        className="pointer-events-none absolute right-0 top-1/3 h-[28rem] w-[28rem] rounded-full opacity-30 blur-[100px]"
+        style={{ background: "radial-gradient(circle, #d4e0c8 0%, transparent 70%)" }}
+        aria-hidden="true"
+      />
+
+      <div className="relative z-10 flex-1 overflow-y-auto">
         {isEmpty ? (
           <div className="container-app flex min-h-full flex-col">
-            {/* Hero：居中 */}
-            <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
+            <div className="flex flex-1 flex-col items-center justify-center px-4 pb-8 pt-12 text-center">
               <motion.div
-                initial={{ opacity: 0, y: 12 }}
+                initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
+                transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full max-w-3xl"
               >
-                <span className="text-xs font-medium uppercase tracking-widest text-ink-faint">
-                  对话创作
+                <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand shadow-sm backdrop-blur-sm">
+                  <Sprout size={12} className="text-accent" />
+                  对话创作 · ReAct Agent
                 </span>
-                <h1 className="mt-4 font-display text-3xl font-semibold leading-tight text-ink md:text-4xl">
-                  Hi {username}，和青禾一起聊聊创作想法
+
+                <h1 className="mt-7 font-display text-[clamp(2rem,5vw,3.75rem)] font-medium leading-[1.1] tracking-[-0.02em] text-ink">
+                  Hi {username}，
+                  <br />
+                  <span className="text-brand">今天想创作</span>什么农产品短视频？
                 </h1>
-                <p className="mx-auto mt-2 max-w-lg text-sm text-ink-soft">
-                  用自然语言描述需求，AI Agent 会依次完成策划、文案、脚本、视觉与投放。
+
+                <p className="mx-auto mt-5 max-w-lg text-sm leading-relaxed text-ink-soft">
+                  像和一位懂农业的创意搭档聊天。Agent 会自主思考、联网搜索、调用流水线，最终给你一套完整方案。
                 </p>
 
-                {/* 快捷提示：第二张图 2×2 网格 */}
-                <div className="mx-auto mt-6 grid max-w-2xl grid-cols-1 gap-3 px-4 sm:grid-cols-2">
+                <motion.div
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.25, duration: 0.5 }}
+                  className="mx-auto mt-10 w-full max-w-2xl px-2"
+                >
+                  <div className="group relative rounded-3xl border border-border/80 bg-card/90 p-2 shadow-lg backdrop-blur-md transition-all focus-within:border-accent/60 focus-within:shadow-xl focus-within:ring-1 focus-within:ring-accent/30">
+                    <div className="absolute inset-x-0 top-0 h-px rounded-t-3xl bg-gradient-to-r from-transparent via-accent/40 to-transparent opacity-60" />
+                    <Textarea
+                      ref={textareaRef}
+                      value={input}
+                      onChange={(e) => {
+                        setInput(e.target.value);
+                        adjustTextareaHeight(e.target);
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="描述你想创作的农产品短视频，例如：为阳山水蜜桃生成 30 秒抖音视频…"
+                      rows={1}
+                      className="min-h-[56px] resize-none border-0 bg-transparent px-4 py-4 text-sm leading-relaxed text-ink shadow-none ring-0 transition-none placeholder:text-ink-faint/70 focus-visible:ring-0"
+                      disabled={conversation.isRunning}
+                      aria-label="对话输入"
+                    />
+                    <div className="flex items-center justify-between px-3 pb-2 pt-1">
+                      <span className="text-[11px] text-ink-faint/80">
+                        按 Enter 发送，Shift + Enter 换行
+                      </span>
+                      <Button
+                        type="button"
+                        size="icon"
+                        onClick={handleSend}
+                        disabled={!input.trim() || conversation.isRunning}
+                        className="h-10 w-10 rounded-full bg-brand text-primary-foreground shadow-sm transition-all hover:bg-brand-deep hover:shadow-md hover:scale-105 active:scale-95 disabled:opacity-50"
+                        aria-label="发送消息"
+                      >
+                        {conversation.isRunning ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <ArrowRight size={18} />
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </motion.div>
+
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ delay: 0.4 }}
+                  className="mx-auto mt-6 flex max-w-2xl flex-wrap items-center justify-center gap-2 px-2"
+                >
+                  <span className="text-xs text-ink-faint">灵感：</span>
                   {SUGGESTIONS.map((s, idx) => (
                     <motion.button
                       key={s}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.1 + idx * 0.05 }}
+                      initial={{ opacity: 0, scale: 0.95 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: 0.45 + idx * 0.05, duration: 0.3 }}
                       type="button"
                       onClick={() => void handleSuggestion(s)}
-                      disabled={pipeline.isRunning}
+                      disabled={conversation.isRunning}
                       className={cn(
-                        "inline-flex items-center justify-center gap-1.5 rounded-full border border-border bg-card px-4 py-2.5 text-xs text-ink-soft shadow-sm transition-all",
-                        "hover:border-primary/40 hover:bg-primary/5 hover:text-ink",
-                        "active:scale-95",
-                        pipeline.isRunning && "cursor-not-allowed opacity-50",
+                        "rounded-full border border-border bg-card/70 px-3 py-1.5 text-xs text-ink-soft shadow-sm transition-all hover:border-accent/50 hover:bg-card hover:text-ink hover:shadow",
+                        conversation.isRunning && "cursor-not-allowed opacity-50",
                       )}
                     >
-                      <Sparkles size={12} className="shrink-0 text-primary" />
-                      <span className="line-clamp-1 text-left">{s}</span>
+                      {s}
                     </motion.button>
                   ))}
-                </div>
-
-                {/* 输入框 */}
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.35 }}
-                  className="mx-auto mt-8 w-full max-w-2xl px-4"
-                >
-                  <div className="relative">
-                    <Input
-                      ref={inputRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder="描述你想创作的农产品短视频，例如：为阳山水蜜桃生成 30 秒抖音视频..."
-                      className="h-14 rounded-full border-border bg-card pr-14 text-sm shadow-sm transition-shadow focus-visible:ring-2 focus-visible:ring-ring"
-                      disabled={pipeline.isRunning}
-                      aria-label="对话输入"
-                    />
-                    <Button
-                      type="button"
-                      size="icon"
-                      onClick={handleSend}
-                      disabled={!input.trim() || pipeline.isRunning}
-                      className="absolute right-2 top-1/2 h-10 w-10 -translate-y-1/2 rounded-full"
-                      aria-label="发送消息"
-                    >
-                      {pipeline.isRunning ? (
-                        <Loader2 size={18} className="animate-spin" />
-                      ) : (
-                        <ArrowRight size={18} />
-                      )}
-                    </Button>
-                  </div>
-                  <p className="mt-2 text-xs text-ink-faint">按 Enter 发送</p>
                 </motion.div>
               </motion.div>
             </div>
 
-            {/* 精选作品：底部 2 列大卡 */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.45 }}
-              className="pb-8 pt-4"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.6, duration: 0.5 }}
+              className="pb-16 pt-6"
             >
-              <div className="mb-4 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden="true" />
-                  <h3 className="font-display text-base font-semibold text-ink">精选作品</h3>
+              <div className="mb-6 flex items-end justify-between">
+                <div>
+                  <span className="text-[11px] font-semibold uppercase tracking-[0.16em] text-accent">
+                    Featured Works
+                  </span>
+                  <h3 className="mt-1 font-display text-xl font-medium text-ink">
+                    精选创作案例
+                  </h3>
                 </div>
                 <a
                   href="#/create"
-                  className="inline-flex items-center gap-1 text-xs text-ink-soft transition-colors hover:text-primary"
+                  className="inline-flex items-center gap-1 text-xs text-ink-soft transition-colors hover:text-brand"
                 >
                   查看全部
                   <ArrowRight size={12} />
                 </a>
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid gap-5 sm:grid-cols-2">
                 {FEATURED_WORKS.map((w, idx) => (
-                  <FeaturedCard key={w.title} work={w} index={idx} onClick={handleSuggestion} />
+                  <FeaturedCard
+                    key={w.title}
+                    work={w}
+                    index={idx}
+                    onClick={handleSuggestion}
+                  />
                 ))}
               </div>
             </motion.div>
           </div>
         ) : (
-          <div className="container-app py-6">
-            <div className="mx-auto max-w-3xl space-y-4">
+          <div className="container-app px-4 pb-40 pt-8">
+            <div className="mx-auto max-w-3xl space-y-8">
               <AnimatePresence initial={false}>
-                {pipeline.messages.map((msg) => (
+                {conversation.messages.map((msg) => (
                   <MessageBubble key={msg.id} msg={msg} />
                 ))}
               </AnimatePresence>
-
-              {/* 一键成片按钮 */}
-              {pipeline.canCompose && !pipeline.isRunning && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex justify-center pt-2"
-                >
-                  <Button onClick={() => void pipeline.composeVideo()} disabled={pipeline.isRunning}>
-                    <Film size={16} />
-                    一键成片
-                  </Button>
-                </motion.div>
-              )}
-
               <div ref={messagesEndRef} />
             </div>
           </div>
         )}
       </div>
 
-      {/* 非空状态：底部固定输入框 */}
       {!isEmpty && (
-        <div className="border-t border-border bg-background/80 backdrop-blur-sm">
+        <div className="fixed bottom-0 left-0 right-0 z-50 border-t border-border/70 bg-background/85 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl">
           <div className="container-app py-4">
             <div className="mx-auto max-w-3xl">
-              <div className="flex items-end gap-2 rounded-lg border border-border bg-card p-2 shadow-sm focus-within:ring-2 focus-within:ring-ring">
+              <div className="relative rounded-2xl border border-border/80 bg-card/95 p-2 shadow-lg transition-all focus-within:border-accent/50 focus-within:shadow-xl focus-within:ring-1 focus-within:ring-accent/20">
                 <Textarea
+                  ref={textareaRef}
                   value={input}
-                  onChange={(e) => setInput(e.target.value)}
+                  onChange={(e) => {
+                    setInput(e.target.value);
+                    adjustTextareaHeight(e.target);
+                  }}
                   onKeyDown={handleKeyDown}
                   placeholder="继续补充你的想法…"
                   rows={1}
-                  className="min-h-[40px] resize-none border-0 bg-transparent focus-visible:ring-0"
-                  disabled={pipeline.isRunning}
+                  className="min-h-[48px] resize-none border-0 bg-transparent px-4 py-3 text-sm leading-relaxed text-ink shadow-none ring-0 placeholder:text-ink-faint/70 focus-visible:ring-0"
+                  disabled={conversation.isRunning}
                   aria-label="对话输入"
                 />
-                <Button
-                  type="button"
-                  size="icon"
-                  onClick={handleSend}
-                  disabled={!input.trim() || pipeline.isRunning}
-                  aria-label="发送消息"
-                >
-                  {pipeline.isRunning ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <Send size={16} />
-                  )}
-                </Button>
-              </div>
-              <div className="mt-1.5 flex items-center justify-between text-xs text-ink-faint">
-                <span>按 Enter 发送，Shift + Enter 换行</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    pipeline.reset();
-                    const planId = searchParams.get("planId");
-                    if (planId) {
-                      searchParams.delete("planId");
-                      setSearchParams(searchParams, { replace: true });
-                    }
-                  }}
-                  className="inline-flex items-center gap-1 hover:text-ink"
-                >
-                  <RefreshCw size={12} />
-                  新对话
-                </button>
+                <div className="flex items-center justify-between px-3 pb-1 pt-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] text-ink-faint/80">
+                      Enter 发送 · Shift + Enter 换行
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleNewConversation}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[11px] text-ink-faint transition-colors hover:bg-secondary hover:text-ink"
+                    >
+                      <RefreshCw size={11} />
+                      新对话
+                    </button>
+                    <Button
+                      type="button"
+                      size="icon"
+                      onClick={handleSend}
+                      disabled={!input.trim() || conversation.isRunning}
+                      className="h-9 w-9 rounded-full bg-brand text-primary-foreground shadow-sm transition-all hover:bg-brand-deep hover:scale-105 active:scale-95 disabled:opacity-50"
+                      aria-label="发送消息"
+                    >
+                      {conversation.isRunning ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Send size={16} />
+                      )}
+                    </Button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -354,139 +363,35 @@ export function ChatPage() {
   );
 }
 
-/** 精选作品大卡（第二张图底部样式）。 */
-function FeaturedCard({
-  work,
-  index,
-  onClick,
-}: {
-  work: (typeof FEATURED_WORKS)[number];
-  index: number;
-  onClick: (text: string) => void;
-}) {
-  const text = `参考「${work.title}」的风格，${work.desc}`;
-  return (
-    <motion.article
-      initial={{ opacity: 0, y: 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.5 + index * 0.08, duration: 0.45 }}
-      whileHover={{ y: -4 }}
-      onClick={() => onClick(text)}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onClick(text);
-        }
-      }}
-      className="group cursor-pointer overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-shadow hover:shadow-md"
-      aria-label={`参考案例：${work.title}（${work.platform} · ${work.duration}）`}
-    >
-      <div className="relative aspect-[16/10] overflow-hidden bg-muted/40">
-        <img
-          src={`https://trae-api-cn.mchost.guru/api/ide/v1/text_to_image?prompt=${encodeURIComponent(work.prompt)}&image_size=landscape_16_9`}
-          alt={work.title}
-          loading="lazy"
-          className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
-          onError={(e) => {
-            (e.currentTarget as HTMLImageElement).style.display = "none";
-            const parent = (e.currentTarget as HTMLImageElement).parentElement;
-            if (parent) {
-              parent.style.background =
-                "linear-gradient(135deg, hsl(var(--secondary)) 0%, hsl(var(--accent)/0.2) 100%)";
-            }
-          }}
-        />
-        {/* 底部渐变 + 标题叠加 */}
-        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 via-black/30 to-transparent p-4 pt-12">
-          <h4 className="font-display text-base font-semibold text-white">{work.title}</h4>
-          <div className="mt-1.5 flex items-center gap-2">
-            <span className="rounded bg-white/20 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-              {work.platform}
-            </span>
-            <span className="rounded bg-white/20 px-1.5 py-0.5 text-[10px] text-white backdrop-blur-sm">
-              {work.duration}
-            </span>
-          </div>
-        </div>
-      </div>
-      <p className="p-3 text-xs text-ink-soft line-clamp-2">{work.desc}</p>
-    </motion.article>
-  );
-}
-
 function MessageBubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === "user";
-
+  if (!isUser) return <ReActMessage msg={msg} />;
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn("flex", isUser ? "justify-end" : "justify-start")}
+      initial={{ opacity: 0, y: 12, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="flex justify-end"
     >
-      <div
-        className={cn(
-          "max-w-[85%] rounded-lg px-4 py-2.5",
-          isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-card border border-border text-ink",
-        )}
-      >
-        {msg.type === "loading" && (
-          <div className="flex items-center gap-2 text-sm text-ink-soft">
-            <Loader2 size={14} className="animate-spin" />
-            <span>{msg.content}</span>
+      <div className="flex max-w-[72%] items-start gap-2.5 sm:max-w-[65%]">
+        <div
+          className="relative overflow-hidden rounded-2xl rounded-tr-sm px-4 py-2.5 text-primary-foreground shadow-md"
+          style={{
+            background: "linear-gradient(135deg, #3d5a3d 0%, #2d4a2b 100%)",
+          }}
+        >
+          <p className="whitespace-pre-wrap text-[15px] leading-relaxed">{msg.content}</p>
+          <div className="mt-1 text-right text-[10px] opacity-60">
+            {new Date(msg.ts).toLocaleTimeString("zh-CN", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
           </div>
-        )}
-
-        {msg.type === "text" && <p className="whitespace-pre-wrap text-sm">{msg.content}</p>}
-
-        {msg.type === "agent" && (
-          <div>
-            <p className="mb-2 text-sm font-medium">{msg.content}</p>
-            {msg.meta?.step != null && msg.meta?.output != null ? (
-              <AgentOutputView step={msg.meta.step as NodeKey} output={msg.meta.output} />
-            ) : null}
-          </div>
-        )}
-
-        {msg.type === "video" && (
-          <div>
-            <p className="mb-2 text-sm font-medium">{msg.content}</p>
-            {msg.meta?.video_url ? (
-              <video
-                src={resolveMediaUrl(msg.meta.video_url as string) ?? undefined}
-                controls
-                className="mt-2 w-full rounded-md"
-                style={{ maxHeight: 400 }}
-              />
-            ) : null}
-            {msg.meta?.audio_url ? (
-              <div className="mt-2 text-xs text-ink-faint">
-                <a
-                  href={resolveMediaUrl(msg.meta.audio_url as string) ?? "#"}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hover:text-primary hover:underline"
-                >
-                  配音音频 →
-                </a>
-              </div>
-            ) : null}
-            {msg.meta?.image_count ? (
-              <div className="mt-1 text-xs text-ink-faint">
-                使用 {String(msg.meta.image_count)} 张分镜图 · 预计时长{" "}
-                {String(msg.meta.duration_estimate ?? "—")}
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        <div className="mt-1 text-[10px] opacity-60">
-          {new Date(msg.ts).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}
         </div>
+        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-card text-ink-soft shadow-sm">
+          <MessageSquare size={15} />
+        </span>
       </div>
     </motion.div>
   );

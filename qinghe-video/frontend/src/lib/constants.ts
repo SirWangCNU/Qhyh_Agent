@@ -125,7 +125,6 @@ export const ROUTES = {
   chat: "/chat",
   workshop: "/workshop",
   canvas: "/canvas",
-  agents: "/agents",
   plan: "/plan",
   assets: "/assets",
 } as const;
@@ -140,6 +139,5 @@ export const NAV_LINKS: Array<{
   { to: ROUTES.chat, label: "对话创作", route: ROUTES.chat },
   { to: ROUTES.workshop, label: "分步工坊", route: ROUTES.workshop },
   { to: ROUTES.canvas, label: "无限画布", route: ROUTES.canvas },
-  { to: ROUTES.agents, label: "Agent 管理", route: ROUTES.agents },
   { to: ROUTES.assets, label: "我的资产", route: ROUTES.assets },
 ];

@@ -20,7 +20,7 @@ export function SidebarProgress({ collapsed }: SidebarProgressProps) {
     <AnimatePresence initial={false}>
       {taskId && !collapsed && (
         <motion.section
-          className="mx-3 rounded-md border border-border bg-card/60 p-3"
+          className="mx-3 my-2 rounded-xl border border-brand/10 bg-white/60 p-3 backdrop-blur-sm"
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: "auto" }}
           exit={{ opacity: 0, height: 0 }}

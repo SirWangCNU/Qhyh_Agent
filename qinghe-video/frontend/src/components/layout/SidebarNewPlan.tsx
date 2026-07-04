@@ -1,6 +1,5 @@
 import { useNavigate } from "react-router-dom";
 import { Plus } from "lucide-react";
-import { usePlans } from "@/hooks/use-plans";
 import { ROUTES } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -8,31 +7,28 @@ interface SidebarNewPlanProps {
   collapsed: boolean;
 }
 
-/** "新建方案" FAB 按钮。 */
 export function SidebarNewPlan({ collapsed }: SidebarNewPlanProps) {
   const navigate = useNavigate();
-  const { createPlan } = usePlans();
 
   function handleClick() {
-    const plan = createPlan();
-    navigate(`${ROUTES.chat}?planId=${encodeURIComponent(plan.id)}`);
+    navigate(ROUTES.chat);
   }
 
   return (
-    <div className="px-3">
+    <div className="px-3 py-2">
       <button
         type="button"
         onClick={handleClick}
-        aria-label="新建方案"
-        title="新建方案"
+        aria-label="新建对话"
+        title="新建对话"
         className={cn(
-          "flex w-full items-center gap-2 rounded-md border border-border bg-card px-3 py-2 text-sm font-medium text-ink transition-all",
-          "hover:border-primary hover:bg-primary/5 hover:text-primary hover:scale-[1.02] active:scale-[0.98]",
-          collapsed && "justify-center px-0",
+          "flex w-full items-center gap-2 rounded-xl border border-brand/20 bg-white/70 px-3 py-2.5 text-sm font-normal text-ink-soft transition-colors",
+          "hover:border-brand/40 hover:bg-brand/10 hover:text-brand",
+          collapsed && "h-9 w-9 justify-center rounded-full px-0",
         )}
       >
         <Plus size={16} aria-hidden="true" />
-        {!collapsed && <span>新建方案</span>}
+        {!collapsed && <span>新建对话</span>}
       </button>
     </div>
   );

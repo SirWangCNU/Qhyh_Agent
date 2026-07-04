@@ -466,7 +466,7 @@ export interface ConsistencyImageSlot {
 // ============================================================
 
 export type ChatMessageRole = "user" | "assistant";
-export type ChatMessageType = "text" | "loading" | "agent" | "compose" | "video";
+export type ChatMessageType = "text" | "loading" | "agent" | "compose" | "video" | "react";
 
 export interface ChatMessage {
   id: string;
@@ -712,4 +712,106 @@ export interface WorkshopSessionCreateInput {
 export interface WorkshopSessionUpdateInput {
   name?: string;
   state?: Partial<WorkshopSessionState>;
+}
+
+// ============================================================
+// 对话创作 Agent API（POST /api/conversation/chat）
+// 对齐 src/conversation_agent/models.py
+// ============================================================
+
+/** 对话角色。 */
+export type ConversationRole = "user" | "assistant" | "tool";
+
+/** ReAct 事件类型（对齐后端 EventType）。 */
+export type ConversationEventType =
+  | "conversation_created"
+  | "think"
+  | "tool_call"
+  | "tool_result"
+  | "answer"
+  | "error"
+  | "done";
+
+/** 对话消息（兼容多轮，对齐后端 ConversationMessage）。 */
+export interface ConversationMessage {
+  role: ConversationRole;
+  content: string;
+  tool_calls?: Array<Record<string, unknown>>;
+  tool_call_id?: string;
+}
+
+/** 对话请求（POST /api/conversation/chat）。 */
+export interface ConversationRequest {
+  messages: ConversationMessage[];
+  max_iterations?: number;
+  /** 可选：指定要落库的对话会话 ID，后端在流结束后自动写入消息 */
+  conversation_id?: string;
+}
+
+/** 单个 ReAct 事件（SSE 投递 / 同步响应内嵌）。 */
+export interface ConversationEvent {
+  event: ConversationEventType;
+  data: Record<string, unknown>;
+}
+
+/** 对话同步响应（POST /api/conversation/chat/sync）。 */
+export interface ConversationResponse {
+  answer: string;
+  events: ConversationEvent[];
+  iterations: number;
+}
+
+// ============================================================
+// 对话会话（Conversation Sessions）—— 与后端 src/conversation_sessions 对齐
+// ============================================================
+
+/** 单条对话消息 DTO（GET /api/conversation-sessions/{id} 内嵌）。 */
+export interface ConversationMessageDTO {
+  id: string;
+  conversation_id: string;
+  seq: number;
+  role: "user" | "assistant";
+  type: "text" | "react";
+  content: string;
+  meta_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+/** 对话会话列表项（GET /api/conversation-sessions，不含消息明细）。 */
+export interface ConversationSummaryDTO {
+  id: string;
+  title: string;
+  summary: string | null;
+  iterations: number;
+  message_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** 对话会话详情（GET /api/conversation-sessions/{id}，含全部消息）。 */
+export interface ConversationDetailDTO extends ConversationSummaryDTO {
+  messages: ConversationMessageDTO[];
+}
+
+/** 对话会话列表分页响应。 */
+export interface ConversationListResponse {
+  items: ConversationSummaryDTO[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+/** POST /api/conversation-sessions 请求体。 */
+export interface ConversationCreateInput {
+  title?: string;
+  first_message?: string;
+}
+
+/** POST /api/conversation-sessions/{id}/messages 请求体。 */
+export interface ConversationMessageCreateInput {
+  role: "user" | "assistant";
+  type?: "text" | "react";
+  content: string;
+  meta_json?: Record<string, unknown>;
+  iterations?: number;
 }

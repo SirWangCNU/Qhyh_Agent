@@ -3,68 +3,55 @@ import { Logo } from "@/components/shared/Logo";
 import { ROUTES } from "@/lib/constants";
 
 /**
- * 页脚：三栏 grid + 底部版权行。
- * 复刻旧 index.html L572-L613 的结构。
+ * 页脚：简洁的底部信息条。
+ *
+ * 视觉上尽量轻量，不抢占对话创作区的主体注意力：
+ * 一行品牌、描述、快捷链接，底部一行版权。
  */
 export function Footer() {
+  const links = [
+    { to: ROUTES.create, label: "开始创作" },
+    { to: ROUTES.workshop, label: "分步工坊" },
+    { to: ROUTES.plan, label: "规划设计" },
+  ];
+
   return (
     <footer
       id="about"
-      className="mt-16 border-t border-border bg-background/60"
+      className="border-t border-border bg-background/50 backdrop-blur-sm"
       role="contentinfo"
     >
-      <div className="container-app py-10">
-        <div className="grid gap-8 md:grid-cols-3">
-          {/* 品牌列 */}
-          <div>
-            <Logo asLink={false} size={28} />
-            <p className="mt-3 max-w-sm text-sm leading-relaxed text-ink-soft">
-              面向农户和农业合作社的多 Agent 协同短视频智能创作平台。用户只需输入农产品基本信息，系统通过五个 AI Agent 流水线协作，自动生成一套完整的短视频创作方案。
-            </p>
+      <div className="container-app py-8">
+        <div className="flex flex-col items-center justify-between gap-5 md:flex-row">
+          <div className="flex items-center gap-2.5">
+            <Logo asLink={false} size={22} />
+            <span className="font-display text-sm font-semibold text-ink">
+              青禾映画
+            </span>
           </div>
 
-          {/* 分步工坊列 */}
-          <nav aria-label="分步工坊">
-            <h4 className="font-display text-sm font-semibold text-ink">分步工坊</h4>
-            <ul className="mt-3 space-y-2 text-sm text-ink-soft">
-              {["策划 Agent", "文案 Agent", "脚本 Agent", "视觉 Agent", "投放 Agent"].map((label) => (
-                <li key={label}>
-                  <Link
-                    to={ROUTES.workshop}
-                    className="transition-colors hover:text-primary"
-                  >
-                    {label}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </nav>
+          <p className="max-w-xs text-center text-xs leading-relaxed text-ink-faint md:text-left">
+            面向农户与农业合作社的短视频智能创作平台，多 Agent 协同，一键生成完整方案。
+          </p>
 
-          {/* 说明列 */}
-          <nav aria-label="说明">
-            <h4 className="font-display text-sm font-semibold text-ink">说明</h4>
-            <ul className="mt-3 space-y-2 text-sm text-ink-soft">
-              <li>
-                <Link to={ROUTES.create} className="transition-colors hover:text-primary">
-                  开始创作
-                </Link>
-              </li>
-              <li>
-                <Link to={ROUTES.agents} className="transition-colors hover:text-primary">
-                  Agent 管理
-                </Link>
-              </li>
-              <li>
-                <Link to={ROUTES.plan} className="transition-colors hover:text-primary">
-                  规划设计
-                </Link>
-              </li>
-            </ul>
+          <nav
+            aria-label="页脚导航"
+            className="flex flex-wrap items-center justify-center gap-4 text-xs text-ink-soft"
+          >
+            {links.map((link) => (
+              <Link
+                key={link.to}
+                to={link.to}
+                className="transition-colors hover:text-brand"
+              >
+                {link.label}
+              </Link>
+            ))}
           </nav>
         </div>
 
-        <div className="mt-8 flex flex-col items-start justify-between gap-2 border-t border-border pt-4 text-xs text-ink-faint sm:flex-row sm:items-center">
-          <span>青禾映画 MVP · 农业短视频智能创作平台</span>
+        <div className="mt-6 border-t border-border pt-4 text-center text-[11px] text-ink-faint/80">
+          青禾映画 MVP · 农业短视频智能创作平台
         </div>
       </div>
     </footer>

@@ -27,6 +27,8 @@ from src.agent_steps import AgentStep, AgentStepRequest, run_agent_step
 from src.assets import assets_router, record_asset, url_to_local_path
 from src.auth.dependencies import get_current_user
 from src.canvas.router import router as canvas_router
+from src.conversation_agent.router import router as conversation_router
+from src.conversation_sessions.router import router as conversation_sessions_router
 from src.auth.router import router as auth_router
 from src.config import get_video_model_options, settings
 from src.consistency_images import consistency_images_router
@@ -79,6 +81,10 @@ app.include_router(assets_router)
 app.include_router(canvas_router)
 # 注册工坊会话路由（分步工坊历史记录持久化）
 app.include_router(workshop_sessions_router)
+# 注册对话创作 Agent 路由（ReAct 自主决策 + 联网搜索）
+app.include_router(conversation_router)
+# 注册对话会话路由（对话历史持久化 + 侧边栏列表）
+app.include_router(conversation_sessions_router)
 
 # 允许前端跨域访问
 app.add_middleware(
@@ -138,7 +144,6 @@ def index():
 # SPA 路由兼容：所有前端路径返回同一 index.html，由 React Router 接管
 @app.get("/chat", summary="对话创作页面")
 @app.get("/plan", summary="规划设计页面")
-@app.get("/agents", summary="Agent 管理页面")
 @app.get("/create", summary="开始创作页面")
 @app.get("/workshop", summary="分步工坊页面")
 @app.get("/canvas", summary="无限画布页面")

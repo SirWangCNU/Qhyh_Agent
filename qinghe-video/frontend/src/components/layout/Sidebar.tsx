@@ -16,8 +16,8 @@ import { SidebarWorkshopList } from "./SidebarWorkshopList";
  * 2. 新建方案入口
  * 3. 当前生成任务的流水线进度展示
  * 4. 两个独立分组：
- *    - 对话记录（Plan）：localStorage，use-plans.ts
- *    - 工坊记录（Workshop Session）：后端 /api/workshop/sessions，use-workshop-sessions.ts
+ *    - 对话记录：后端 /api/conversation-sessions，use-conversation-sessions.ts
+ *    - 工坊记录：后端 /api/workshop/sessions，use-workshop-sessions.ts
  *
  * 交互：
  * - 默认隐藏，点击顶部品牌 trigger 后展开
@@ -37,7 +37,7 @@ export function Sidebar() {
       animate={{ width: visible ? (collapsed ? 64 : 280) : 0 }}
       transition={{ type: "spring", stiffness: 300, damping: 30 }}
       className={cn(
-        "site-sidebar sticky top-0 z-40 flex h-screen shrink-0 flex-col border-r border-border bg-bg-alt py-4",
+        "site-sidebar sticky top-0 z-40 flex h-screen shrink-0 flex-col border-r border-border/60 bg-gradient-to-b from-[#faf6ee] to-[#f5efe6] pt-2 pb-4",
         "overflow-hidden",
         !visible && "border-r-0",
       )}

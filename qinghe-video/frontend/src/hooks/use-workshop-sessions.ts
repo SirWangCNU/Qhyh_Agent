@@ -14,6 +14,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { apiFetch, apiGet, apiPost } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
 import type {
   WorkshopSessionCreateInput,
   WorkshopSessionDTO,
@@ -36,10 +37,12 @@ const QK = {
 
 /** 列出当前用户所有工坊会话。 GET /api/workshop/sessions */
 export function useWorkshopSessions() {
+  const token = useAuthStore((s) => s.token);
   return useQuery({
     queryKey: QK.sessions,
     queryFn: () =>
       apiGet<WorkshopSessionSummaryDTO[]>("/api/workshop/sessions"),
+    enabled: !!token,
   });
 }
 

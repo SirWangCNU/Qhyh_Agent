@@ -1,5 +1,5 @@
 """用户表与资产表 ORM 模型。"""
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy import Column, Integer, String, DateTime, Boolean, ForeignKey, Text
 from src.db.database import Base
 
@@ -13,7 +13,7 @@ class User(Base):
     hashed_password = Column(String(255), nullable=False)
     role = Column(String(16), default="user", nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
 
 
 class Asset(Base):
@@ -36,4 +36,4 @@ class Asset(Base):
     mime_type = Column(String(128), nullable=True)
     title = Column(String(255), nullable=True)
     meta_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False, index=True)

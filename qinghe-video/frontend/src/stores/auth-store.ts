@@ -1,10 +1,12 @@
 import { create } from "zustand";
 import { STORAGE_KEYS } from "@/lib/constants";
+import { queryClient } from "@/lib/queryClient";
 
 /**
  * 鉴权状态。
  * - token / user 持久化到 localStorage（与旧 HTML 版本同名键，便于书签/会话延续）
- * - hydrate() 在应用启动时从 localStorage 恢复
+ * - hydrate() 在应用启动时从 localStorage 恢复（main.tsx 渲染前同步调用）
+ * - setAuth 后 invalidate 历史记录查询，确保登录后侧边栏立即加载
  */
 
 export interface AuthUser {
@@ -34,6 +36,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       /* localStorage 不可用时静默忽略 */
     }
     set({ token, user, isAuthenticated: true });
+    // 登录成功后刷新所有历史记录列表（工坊会话 + 对话会话）
+    queryClient.invalidateQueries({ queryKey: ["workshop", "sessions"] });
+    queryClient.invalidateQueries({ queryKey: ["conversations"] });
   },
 
   logout: () => {

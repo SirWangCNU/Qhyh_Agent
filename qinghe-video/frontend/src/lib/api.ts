@@ -64,8 +64,13 @@ export async function apiFetch<T = unknown>(
   }
 
   if (resp.status === 401 && !skipAuth) {
-    useAuthStore.getState().logout();
-    throw new ApiError("登录已失效，请重新登录", 401);
+    // 仅当请求确实带了 token（登录态失效）才 logout；
+    // 若请求未带 token（未登录或 hydrate 未完成），不破坏 localStorage
+    if (finalHeaders.Authorization) {
+      useAuthStore.getState().logout();
+      throw new ApiError("登录已失效，请重新登录", 401);
+    }
+    throw new ApiError("未登录", 401);
   }
 
   if (!resp.ok) {

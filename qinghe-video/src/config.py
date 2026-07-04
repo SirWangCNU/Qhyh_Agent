@@ -91,6 +91,11 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD: str = "admin123"
 
+    # ---------- 对话创作 Agent 配置（可选，零配置可跑） ----------
+    CONVERSATION_AGENT_MAX_ITERATIONS: int = 10    # ReAct 循环最大迭代数
+    CONVERSATION_AGENT_TEMPERATURE: float = 0.7    # agent 思考温度
+    WEB_SEARCH_MAX_RESULTS: int = 5                # DuckDuckGo 单次返回结果数
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:

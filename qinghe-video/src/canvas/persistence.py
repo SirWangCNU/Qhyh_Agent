@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
@@ -29,9 +29,9 @@ class CanvasProjectORM(Base):
     nodes_json = Column(Text, nullable=False, default="[]")
     edges_json = Column(Text, nullable=False, default="[]")
     viewport_json = Column(Text, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False
+        DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False
     )
 
 
@@ -158,7 +158,7 @@ def update_project(
         project.edges_json = _to_json(edges)
     if viewport is not None:
         project.viewport_json = _to_json(viewport)
-    project.updated_at = datetime.utcnow()
+    project.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(project)
     return project
@@ -200,7 +200,7 @@ def update_node_data(
         logger.warning("[canvas] 未找到节点 node_id=%s project=%s", node_id, project_id)
         return None
     project.nodes_json = _to_json(nodes)
-    project.updated_at = datetime.utcnow()
+    project.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(project)
     return _orm_to_dict(project)

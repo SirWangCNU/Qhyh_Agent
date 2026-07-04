@@ -5,6 +5,7 @@ import { HealthPill } from "./HealthPill";
 import { NAV_LINKS } from "@/lib/constants";
 import { useUIStore } from "@/stores/ui-store";
 import { useAuthStore } from "@/stores/auth-store";
+import { useLogout } from "@/hooks/use-logout";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -17,7 +18,7 @@ import { cn } from "@/lib/utils";
 export function Header() {
   const toggleSidebarVisible = useUIStore((s) => s.toggleSidebarVisible);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const logout = useAuthStore((s) => s.logout);
+  const logout = useLogout();
   const user = useAuthStore((s) => s.user);
 
   return (

@@ -169,3 +169,77 @@ def test_usage_example(monkeypatch, capsys):
     assert resp.answer
     assert resp.iterations == 2
     assert len(resp.events) >= 4  # think + tool_call + tool_result + answer + done
+
+
+# ============================================================
+# 跨用户归属校验测试（防止用户 B 持用户 A 的 conversation_id 写入他人会话）
+# ============================================================
+
+
+def test_chat_sync_rejects_cross_user_conversation(monkeypatch):
+    """用户 B 持用户 A 的 conversation_id 调 /chat/sync 应返回 404。"""
+    responses = [FakeAIMessage(content="答案")]
+    monkeypatch.setattr(service_mod, "get_llm", fake_llm_factory(responses))
+    client = TestClient(app)
+
+    # 用户 A 注册、登录、创建对话
+    token_a = register_and_login(client, "crossUserA", "passA123456")
+    create_resp = client.post(
+        "/api/conversation-sessions",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"first_message": "A 的对话"},
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    conv_id_a = create_resp.json()["id"]
+
+    # 用户 B 注册、登录
+    token_b = register_and_login(client, "crossUserB", "passB123456")
+
+    # 用户 B 持 A 的 conversation_id 调 /chat/sync → 期望 404
+    resp = client.post(
+        "/api/conversation/chat/sync",
+        headers={"Authorization": f"Bearer {token_b}"},
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "conversation_id": conv_id_a,
+        },
+    )
+    assert resp.status_code == 404, resp.text
+    assert "无权访问" in resp.json()["detail"]
+
+
+def test_chat_stream_rejects_cross_user_conversation(monkeypatch):
+    """用户 B 持用户 A 的 conversation_id 调 /chat（SSE）应收到 error 事件并终止。"""
+    responses = [FakeAIMessage(content="答案")]
+    monkeypatch.setattr(service_mod, "get_llm", fake_llm_factory(responses))
+    client = TestClient(app)
+
+    # 用户 A 创建对话
+    token_a = register_and_login(client, "streamCrossA", "passA123456")
+    create_resp = client.post(
+        "/api/conversation-sessions",
+        headers={"Authorization": f"Bearer {token_a}"},
+        json={"first_message": "A 的流式对话"},
+    )
+    assert create_resp.status_code == 200, create_resp.text
+    conv_id_a = create_resp.json()["id"]
+
+    # 用户 B 登录
+    token_b = register_and_login(client, "streamCrossB", "passB123456")
+
+    # 用户 B 持 A 的 conversation_id 调 /chat（SSE）→ 应收到 error 事件
+    with client.stream(
+        "POST",
+        "/api/conversation/chat",
+        headers={"Authorization": f"Bearer {token_b}"},
+        json={
+            "messages": [{"role": "user", "content": "hi"}],
+            "conversation_id": conv_id_a,
+        },
+    ) as resp:
+        assert resp.status_code == 200  # SSE 总是 200，错误在事件 data 里
+        body = "".join(resp.iter_text())
+        assert "error" in body
+        assert "无权访问" in body
+        # 不应继续产生 answer/done 事件（流应被 return 终止）
+        assert "answer" not in body

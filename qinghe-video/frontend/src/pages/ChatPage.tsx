@@ -166,20 +166,40 @@ export function ChatPage() {
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-                className="w-full max-w-3xl"
+                className="w-full max-w-4xl"
               >
                 <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card/80 px-4 py-1.5 text-[11px] font-semibold uppercase tracking-[0.18em] text-brand shadow-sm backdrop-blur-sm">
                   <Sprout size={12} className="text-accent" />
                   对话创作 · ReAct Agent
                 </span>
 
-                <h1 className="mt-7 font-display text-[clamp(2rem,5vw,3.75rem)] font-medium leading-[1.1] tracking-[-0.02em] text-ink">
-                  Hi {username}，
-                  <br />
-                  <span className="text-brand">今天想创作</span>什么农产品短视频？
-                </h1>
+                <div className="mt-8 text-center sm:mt-10">
+                  <motion.p
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.1, duration: 0.5 }}
+                    className="mb-3 text-[12px] font-medium tracking-[0.16em] text-ink-faint uppercase"
+                  >
+                    Hi {username}，欢迎来到青禾
+                  </motion.p>
 
-                <p className="mx-auto mt-5 max-w-lg text-sm leading-relaxed text-ink-soft">
+                  <h1 className="font-display text-[clamp(1.75rem,3.8vw,2.75rem)] font-medium leading-[1.45] tracking-[0.01em] text-ink">
+                    <span className="text-brand">今天想创作</span>
+                    <span className="break-keep sm:whitespace-nowrap">
+                      什么农产品短视频？
+                    </span>
+                  </h1>
+
+                  <motion.div
+                    initial={{ scaleX: 0 }}
+                    animate={{ scaleX: 1 }}
+                    transition={{ delay: 0.35, duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                    className="mx-auto mt-5 h-[2px] w-20 origin-left rounded-full bg-gradient-to-r from-brand/30 via-accent to-brand/30 opacity-80"
+                    aria-hidden="true"
+                  />
+                </div>
+
+                <p className="mx-auto mt-6 max-w-xl text-[15px] leading-[1.8] text-ink-soft sm:mt-7">
                   像和一位懂农业的创意搭档聊天。Agent 会自主思考、联网搜索、调用流水线，最终给你一套完整方案。
                 </p>
 

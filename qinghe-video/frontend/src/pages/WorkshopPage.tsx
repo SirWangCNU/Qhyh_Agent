@@ -81,51 +81,54 @@ export function WorkshopPage() {
 
   /** 校验表单必填字段 */
   function validateForm(): string | null {
-    const f = store.form;
+    const state = useWorkshopStore.getState();
+    const f = state.form;
     if (!f.product_name.trim()) return "请填写产品名称";
-    if (!store.oneLiner.trim()) {
-      store.setOneLiner("为该产品制作一个吸引人的农业短视频");
+    if (!state.oneLiner.trim()) {
+      state.setOneLiner("为该产品制作一个吸引人的农业短视频");
     }
-    if (store.selectedTopicIndex === null) return "请先点击 AI 选题并选择一个爆款主题";
+    if (state.selectedTopicIndex === null) return "请先点击 AI 选题并选择一个爆款主题";
     if (!f.selling_points.trim()) return "选题后正在自动补全创作信息，请稍候...";
     return null;
   }
 
   /** 后台自动补全表单（选定主题后静默调用，不暴露按钮） */
   async function handlePolish(): Promise<void> {
-    if (!store.form.product_name.trim()) {
+    const state = useWorkshopStore.getState();
+    if (!state.form.product_name.trim()) {
       alert("请先填写产品名称");
       throw new Error("请先填写产品名称");
     }
-    const oneLiner = store.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
-    if (!store.oneLiner.trim()) {
-      store.setOneLiner(oneLiner);
+    const oneLiner = state.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
+    if (!state.oneLiner.trim()) {
+      state.setOneLiner(oneLiner);
     }
     const resp = await textPolish.mutateAsync({
-      product_name: store.form.product_name,
+      product_name: state.form.product_name,
       one_liner: oneLiner,
     });
-    store.setForm(resp.input);
+    state.setForm(resp.input);
   }
 
   /** 触发 AI 选题：生成多个爆款候选主题 */
   async function handleGenerateTopics(): Promise<void> {
-    if (!store.form.product_name.trim()) {
+    const state = useWorkshopStore.getState();
+    if (!state.form.product_name.trim()) {
       alert("请先填写产品名称");
       return;
     }
-    const oneLiner = store.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
-    if (!store.oneLiner.trim()) {
-      store.setOneLiner(oneLiner);
+    const oneLiner = state.oneLiner.trim() || "为该产品制作一个吸引人的农业短视频";
+    if (!state.oneLiner.trim()) {
+      state.setOneLiner(oneLiner);
     }
     try {
       const resp = await topicGeneration.mutateAsync({
-        product_name: store.form.product_name,
+        product_name: state.form.product_name,
         one_liner: oneLiner,
-        target_platform: store.form.target_platform,
+        target_platform: state.form.target_platform,
       });
-      store.setTopics(resp.topics);
-      store.setSelectedTopicIndex(null);
+      state.setTopics(resp.topics);
+      state.setSelectedTopicIndex(null);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       alert(`选题失败：${msg}`);
@@ -148,8 +151,9 @@ export function WorkshopPage() {
 
   /** 校验前置依赖步骤是否完成 */
   function validateDeps(cfg: WorkshopStepConfig): string | null {
+    const steps = useWorkshopStore.getState().steps;
     for (const dep of cfg.deps) {
-      if (store.steps[dep] !== "done") {
+      if (steps[dep] !== "done") {
         const depCfg = WORKSHOP_STEPS.find((s) => s.key === dep);
         return `请先完成「${depCfg?.title ?? dep}」步骤`;
       }
@@ -208,29 +212,30 @@ export function WorkshopPage() {
 
   /** LLM Agent 步骤 */
   async function execLLMStep(key: WorkshopStepKey) {
+    const state = useWorkshopStore.getState();
     const resp = await runAgentStep.mutateAsync({
       step: key as NodeKey,
-      input: store.form,
-      state: store.workshopState,
-      selected_topic: store.selectedTopic,
+      input: state.form,
+      state: state.workshopState,
+      selected_topic: state.selectedTopic,
     });
     if (resp.status === "error") {
       throw new Error(resp.error ?? `${key} 执行失败`);
     }
-    store.setStepOutput(key, resp.output);
-    store.setWorkshopState(resp.state);
+    state.setStepOutput(key, resp.output);
+    state.setWorkshopState(resp.state);
 
     // 文案步骤完成后，把生成的一致性规划同步写入一致性参考，供画布/后续视觉生成使用
     if (key === "copywriter") {
       const plan = resp.state?.copywriter_output?.consistency_plan;
       if (plan?.character_subject) {
-        store.setConsistencyReferences("character", plan.character_subject);
+        state.setConsistencyReferences("character", plan.character_subject);
       }
       if (plan?.object_subject) {
-        store.setConsistencyReferences("object", plan.object_subject);
+        state.setConsistencyReferences("object", plan.object_subject);
       }
       if (plan?.scene_subject) {
-        store.setConsistencyReferences("scene", plan.scene_subject);
+        state.setConsistencyReferences("scene", plan.scene_subject);
       }
     }
   }
@@ -240,7 +245,8 @@ export function WorkshopPage() {
    * 此函数仅校验是否至少一类已生成；若全部为空，提示用户去面板操作。
    */
   async function execConsistencyImages() {
-    const m = store.mediaResults;
+    const state = useWorkshopStore.getState();
+    const m = state.mediaResults;
     const anyDone =
       m.characterImage?.status === "done" ||
       m.objectImage?.status === "done" ||
@@ -248,7 +254,7 @@ export function WorkshopPage() {
     if (!anyDone) {
       throw new Error("请在下方卡片中填写主体描述（必填）并点击「生成」；可选择性上传参考图走图生图。");
     }
-    store.setStepOutput("consistency_images", {
+    state.setStepOutput("consistency_images", {
       character: m.characterImage?.url ?? null,
       object: m.objectImage?.url ?? null,
       scene: m.sceneImage?.url ?? null,
@@ -266,7 +272,7 @@ export function WorkshopPage() {
     try {
       for (const cfg of WORKSHOP_STEPS) {
         if (cfg.num > DEFAULT_AUTO_RUN_TO) break;
-        if (store.steps[cfg.key] === "done") continue;
+        if (useWorkshopStore.getState().steps[cfg.key] === "done") continue;
         // 一致性生图需要用户主动输入主体描述/上传参考图，自动流跳过
         if (cfg.key === "consistency_images") continue;
         const ok = await executeStep(cfg.key);

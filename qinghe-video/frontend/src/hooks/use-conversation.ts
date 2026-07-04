@@ -19,6 +19,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { BACKEND_URL, STORAGE_KEYS } from "@/lib/constants";
 import { parseConversationSSE } from "@/lib/conversation-sse";
 import { apiGet } from "@/lib/api";
+import { useAuthStore } from "@/stores/auth-store";
 import type {
   ChatMessage,
   ConversationDetailDTO,
@@ -81,6 +82,7 @@ export function useConversation() {
   const conversationIdRef = useRef<string | null>(null);
   const loadHistoryReqIdRef = useRef(0);
   const qc = useQueryClient();
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   const setConversationId = useCallback((id: string | null) => {
     conversationIdRef.current = id;
@@ -123,6 +125,14 @@ export function useConversation() {
     setConversationId(null);
     setIsRunning(false);
   }, [setConversationId]);
+
+  // 登出时重置对话内存状态（清 messages/conversationId）
+  // 防止 A 登出后 B 登录看到 A 的对话残留：AuthOverlay 不卸载 Outlet，useState 会保留
+  useEffect(() => {
+    if (!isAuthenticated) {
+      reset();
+    }
+  }, [isAuthenticated, reset]);
 
   /** 局部更新某条消息。 */
   const updateMessage = useCallback(

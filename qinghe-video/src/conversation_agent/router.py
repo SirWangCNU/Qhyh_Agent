@@ -21,7 +21,12 @@ from sqlalchemy.orm import Session
 from src.auth.dependencies import get_current_user
 from src.conversation_agent.models import ConversationRequest, ConversationResponse
 from src.conversation_agent.service import run_conversation, run_conversation_stream
-from src.conversation_sessions.persistence import append_message, create_conversation, update_iterations
+from src.conversation_sessions.persistence import (
+    append_message,
+    create_conversation,
+    get_conversation,
+    update_iterations,
+)
 from src.db.database import get_db
 from src.db.models import User
 
@@ -87,6 +92,9 @@ def chat_sync(
     if not conversation_id:
         conv = create_conversation(db, current_user.id, first_message=user_text)
         conversation_id = conv.id
+    elif get_conversation(db, conversation_id, current_user.id) is None:
+        # 会话不存在或不属于当前用户：拒绝访问，防止跨用户写入
+        raise HTTPException(status_code=404, detail="对话会话不存在或无权访问")
 
     try:
         resp = run_conversation(request)
@@ -142,6 +150,14 @@ def chat_stream(
                     ensure_ascii=False,
                 )
                 yield f"data: {created_ev}\n\n"
+            elif get_conversation(db, conversation_id, user_id) is None:
+                # 会话不存在或不属于当前用户：返回 SSE error 并终止，防止跨用户写入
+                err = json.dumps(
+                    {"event": "error", "data": {"message": "对话会话不存在或无权访问"}},
+                    ensure_ascii=False,
+                )
+                yield f"data: {err}\n\n"
+                return
 
             for ev in run_conversation_stream(request):
                 ev_dict = {"event": ev.event, "data": ev.data}

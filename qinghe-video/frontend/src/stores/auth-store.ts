@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { STORAGE_KEYS } from "@/lib/constants";
 import { queryClient } from "@/lib/queryClient";
+import { clearAllUserData } from "@/lib/session-cleanup";
 
 /**
  * 鉴权状态。
@@ -29,6 +30,8 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: false,
 
   setAuth: (token, user) => {
+    // 登录前清理前一个用户的本地状态（防止同 tab A→B 切换继承内存状态与缓存）
+    clearAllUserData();
     try {
       localStorage.setItem(STORAGE_KEYS.token, token);
       localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
@@ -36,12 +39,15 @@ export const useAuthStore = create<AuthState>((set) => ({
       /* localStorage 不可用时静默忽略 */
     }
     set({ token, user, isAuthenticated: true });
-    // 登录成功后刷新所有历史记录列表（工坊会话 + 对话会话）
-    queryClient.invalidateQueries({ queryKey: ["workshop", "sessions"] });
+    // 登录成功后刷新所有历史记录列表（工坊会话 + 对话会话 + 画布项目）
+    queryClient.invalidateQueries({ queryKey: ["workshop"] });
     queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    queryClient.invalidateQueries({ queryKey: ["canvas"] });
   },
 
   logout: () => {
+    // 清理所有用户相关本地状态（store 内存 + sessionStorage + react-query 缓存）
+    clearAllUserData();
     try {
       localStorage.removeItem(STORAGE_KEYS.token);
       localStorage.removeItem(STORAGE_KEYS.user);
